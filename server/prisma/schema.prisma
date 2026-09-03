@@ -1,0 +1,133 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email              String   @unique @db.VarChar(255)
+  password_hash      String   @db.VarChar(255)
+  role               Role     @default(CUSTOMER)
+  
+  // --- BỔ SUNG ---
+  is_verified        Boolean  @default(false)
+  avatar_url         String?  @db.VarChar(255)
+  verification_token String?  @db.VarChar(255)
+  // ---------------
+  
+  created_at         DateTime @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  cart               Cart?
+  orders             Order[]
+
+  @@map("users")
+}
+
+// --- BỔ SUNG: BẢNG CATEGORIES ---
+model Category {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String    @unique @db.VarChar(255)
+  description String?
+  image_url   String?   @db.VarChar(255)
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+  
+  products    Product[] // Quan hệ 1-Nhiều với Product
+
+  @@map("categories")
+}
+
+model Product {
+  id             String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name           String      @db.VarChar(255)
+  description    String?
+  price          Decimal     @db.Decimal(12, 2)
+  stock_quantity Int         @default(0)
+  is_active      Boolean     @default(true)
+  created_at     DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime    @default(now()) @updatedAt @db.Timestamptz(6)
+  
+  // --- BỔ SUNG ---
+  images         String[]    // PostgreSQL hỗ trợ lưu mảng String trực tiếp
+  category_id    String?     @db.Uuid
+  category       Category?   @relation(fields: [category_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  // ---------------
+  
+  cart_items     CartItem[]
+  order_items    OrderItem[]
+
+  @@index([category_id], map: "idx_products_category_id") // Bổ sung Index cho khóa ngoại để tối ưu tốc độ tìm kiếm
+  @@map("products")
+}
+
+model Cart {
+  id         String     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id    String?    @unique @db.Uuid
+  session_id String?    @unique @db.VarChar(255)
+  updated_at DateTime   @default(now()) @updatedAt @db.Timestamptz(6)
+  items      CartItem[]
+  user       User?      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("carts")
+}
+
+model CartItem {
+  id         String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  cart_id    String  @db.Uuid
+  product_id String  @db.Uuid
+  quantity   Int     @default(1)
+  cart       Cart    @relation(fields: [cart_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  product    Product @relation(fields: [product_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([cart_id, product_id], map: "unique_cart_product")
+  @@index([cart_id], map: "idx_cart_items_cart_id")
+  @@map("cart_items")
+}
+
+model Order {
+  id                String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id           String      @db.Uuid
+  total_amount      Decimal     @db.Decimal(12, 2)
+  status            OrderStatus @default(PENDING)
+  stripe_session_id String?     @unique @db.VarChar(255)
+  created_at        DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime    @default(now()) @updatedAt @db.Timestamptz(6)
+  items             OrderItem[]
+  user              User        @relation(fields: [user_id], references: [id], onUpdate: NoAction)
+
+  @@index([user_id], map: "idx_orders_user_id")
+  @@map("orders")
+}
+
+model OrderItem {
+  id                String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  order_id          String  @db.Uuid
+  product_id        String  @db.Uuid
+  price_at_purchase Decimal @db.Decimal(12, 2)
+  quantity          Int
+  order             Order   @relation(fields: [order_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  product           Product @relation(fields: [product_id], references: [id], onUpdate: NoAction)
+
+  @@index([order_id], map: "idx_order_items_order_id")
+  @@map("order_items")
+}
+
+enum Role {
+  ADMIN
+  CUSTOMER
+  SELLER
+
+  @@map("user_role")
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  CANCELLED
+
+  @@map("order_status")
+}

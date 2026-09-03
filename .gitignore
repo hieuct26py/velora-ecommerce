@@ -1,0 +1,50 @@
+# ========================
+# OS Generated Files (Rác hệ điều hành)
+# ========================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ========================
+# IDE & Editors (Cấu hình máy cá nhân)
+# ========================
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+
+# ========================
+# Logs & Runtime (File log phát sinh)
+# ========================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ========================
+# Safety Fallbacks (Phòng hộ cho toàn bộ Monorepo)
+# ========================
+# Chặn mọi thư mục node_modules dù nằm ở root, client hay server
+node_modules/
+
+# Chặn mọi biến môi trường nhạy cảm nếu vô tình đặt ở root
+.env
+.env.*
+!.env.example
+
+# Chặn thư mục build/coverage nếu chạy công cụ quét từ root
+dist/
+build/
+coverage/
+
+/test.js
+/query.sql
