@@ -1,4 +1,6 @@
-﻿-- CreateEnum
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- CreateEnum
 CREATE TYPE "user_role" AS ENUM ('ADMIN', 'CUSTOMER', 'SELLER');
 
 -- CreateEnum
