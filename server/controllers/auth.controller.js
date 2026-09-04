@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import crypto from 'node:crypto';
 import { generateTokens } from '../utils/token.js';
 
 const prisma = new PrismaClient();
@@ -53,6 +54,10 @@ export const login = async (req, res) => {
             return res.status(401).json({ message: 'Sai mật khẩu!' });
         }
 
+        if (!user.is_active) {
+            return res.status(403).json({ message: 'Tài khoản của bạn đã bị vô hiệu hóa!' });
+        }
+
         const { accessToken, refreshToken } = generateTokens(user);
 
         res.cookie('refreshToken', refreshToken, {
@@ -74,6 +79,41 @@ export const login = async (req, res) => {
     }
 };
 
+export const changePassword = async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ message: 'Mật khẩu hiện tại và mật khẩu mới là bắt buộc!' });
+        }
+
+        const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+
+        if (!user) {
+            return res.status(404).json({ message: 'Người dùng không tồn tại!' });
+        }
+
+        if (!user.is_active) {
+            return res.status(403).json({ message: 'Tài khoản của bạn đã bị vô hiệu hóa!' });
+        }
+
+        const isPasswordValid = await bcrypt.compare(currentPassword, user.password_hash);
+        if (!isPasswordValid) {
+            return res.status(401).json({ message: 'Mật khẩu hiện tại không đúng!' });
+        }
+
+        const passwordHash = await bcrypt.hash(newPassword, 10);
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { password_hash: passwordHash },
+        });
+
+        return res.status(200).json({ message: 'Đổi mật khẩu thành công!' });
+    } catch (error) {
+        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+    }
+};
+
 export const refreshToken = async (req, res) => {
     const refreshTokenValue = req.cookies?.refreshToken;
 
@@ -81,18 +121,33 @@ export const refreshToken = async (req, res) => {
         return res.status(401).json({ message: 'Không tìm thấy phiên đăng nhập trong Cookie!' });
     }
 
-    jwt.verify(refreshTokenValue, process.env.REFRESH_TOKEN_SECRET, (err, decodedPayload) => {
+    jwt.verify(refreshTokenValue, process.env.REFRESH_TOKEN_SECRET, async (err, decodedPayload) => {
         if (err) {
             return res.status(403).json({ message: 'Phiên đăng nhập đã hết hạn hoặc không hợp lệ!' });
         }
 
-        const newAccessToken = jwt.sign(
-            { sub: decodedPayload.sub, role: decodedPayload.role },
-            process.env.ACCESS_TOKEN_SECRET,
-            { expiresIn: '15m' }
-        );
+        try {
+            const user = await prisma.user.findUnique({ where: { id: decodedPayload.sub } });
 
-        return res.status(200).json({ accessToken: newAccessToken });
+            if (!user) {
+                return res.status(404).json({ message: 'Người dùng không tồn tại!' });
+            }
+
+            if (!user.is_active) {
+                return res.status(403).json({ message: 'Tài khoản của bạn đã bị vô hiệu hóa!' });
+            }
+
+            const newAccessToken = jwt.sign(
+                { sub: user.id, role: user.role },
+                process.env.ACCESS_TOKEN_SECRET,
+                { expiresIn: '15m' }
+            );
+
+            return res.status(200).json({ accessToken: newAccessToken });
+        }
+        catch (error) {
+            return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        }
     });
 };
 

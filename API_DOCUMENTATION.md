@@ -4,7 +4,7 @@ Backend hiện chạy bằng Express tại `http://localhost:5000`.
 
 - Các API được mount dưới prefix `/api`.
 - Request có body dùng JSON cần gửi `Content-Type: application/json`.
-- API Auth là public; hiện chưa có API nào gắn middleware `verifyToken` hoặc `verifyAdmin`.
+- API Auth là public. Các API User yêu cầu Access Token; một số API chỉ dành cho `ADMIN` hoặc chính chủ tài khoản.
 - API cần cookie phải bật credentials ở phía Frontend.
 
 # 1. Health Check
@@ -50,7 +50,11 @@ Backend lưu user với các trường:
 - `email`
 - `password_hash`
 - `role`: `CUSTOMER`
+- `is_active`: `true` mặc định
+- `is_verified`: `false` mặc định
+- `verification_token`: token xác minh được tạo khi đăng ký
 - `created_at`
+- `updated_at`
 
 Response thành công:
 
@@ -168,6 +172,64 @@ Các trường hợp lỗi:
 }
 ```
 
+# PATCH /api/auth/change-password
+
+Dùng để đổi mật khẩu của user đang đăng nhập.
+
+Request cần header:
+
+```http
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+API lấy user từ `sub` trong Access Token, vì vậy không cần truyền `userId`.
+
+Request body:
+
+```json
+{
+  "currentPassword": "OldPassword123!",
+  "newPassword": "NewPassword456!"
+}
+```
+
+- `currentPassword`: string, bắt buộc. Mật khẩu hiện tại của user.
+- `newPassword`: string, bắt buộc. Mật khẩu mới sẽ được hash bằng `bcrypt` trước khi lưu.
+
+Response thành công:
+
+```json
+{
+  "message": "Đổi mật khẩu thành công!"
+}
+```
+
+HTTP status: `200 OK`
+
+Các trường hợp lỗi:
+
+- `400`: thiếu `currentPassword` hoặc `newPassword`.
+
+```json
+{
+  "message": "Mật khẩu hiện tại và mật khẩu mới là bắt buộc!"
+}
+```
+
+- `401`: mật khẩu hiện tại không đúng.
+
+```json
+{
+  "message": "Mật khẩu hiện tại không đúng!"
+}
+```
+
+- `401`: thiếu Access Token.
+- `403`: Access Token không hợp lệ/hết hạn hoặc tài khoản đã bị vô hiệu hóa.
+- `404`: user trong Access Token không còn tồn tại.
+- `500`: lỗi server hoặc database.
+
 # POST /api/auth/refresh-token
 
 Dùng refresh token trong cookie để cấp access token mới.
@@ -239,13 +301,204 @@ Response:
 
 HTTP status: `200 OK`
 
-# 3. Authentication Middleware
+# 3. User Management
 
-Các middleware này đã được code nhưng hiện chưa gắn vào route nào.
+# GET /api/users
+
+Chỉ dành cho `ADMIN`. Dùng để lấy danh sách người dùng, có phân trang và lọc theo trạng thái hoạt động.
+
+Request cần header:
+
+```http
+Authorization: Bearer <access_token>
+```
+
+Query parameters:
+
+- `page`: số trang, mặc định `1`.
+- `limit`: số user mỗi trang, mặc định `10`.
+- `status`: tùy chọn, nhận `active` hoặc `inactive`.
+
+Ví dụ:
+
+```http
+GET /api/users?page=1&limit=10&status=active
+```
+
+Response thành công:
+
+```json
+{
+  "data": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "email": "customer@example.com",
+      "role": "CUSTOMER",
+      "is_active": true,
+      "created_at": "2026-09-03T08:30:00.000Z"
+    }
+  ],
+  "meta": {
+    "total": 1,
+    "page": 1,
+    "limit": 10,
+    "totalPages": 1
+  }
+}
+```
+
+HTTP status: `200 OK`
+
+Các trường hợp lỗi:
+
+- `401`: thiếu Access Token.
+- `403`: Access Token không hợp lệ/hết hạn hoặc user không có role `ADMIN`.
+- `500`: lỗi server hoặc database.
+
+# GET /api/users/:userId
+
+Dùng để lấy thông tin một user. User chỉ được xem chính mình; `ADMIN` được xem mọi user.
+
+Request cần header:
+
+```http
+Authorization: Bearer <access_token>
+```
+
+Path parameter:
+
+- `userId`: UUID của user cần xem.
+
+Ví dụ:
+
+```http
+GET /api/users/550e8400-e29b-41d4-a716-446655440000
+```
+
+Response thành công:
+
+```json
+{
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "email": "customer@example.com",
+    "role": "CUSTOMER",
+    "is_active": true,
+    "created_at": "2026-09-03T08:30:00.000Z"
+  }
+}
+```
+
+HTTP status: `200 OK`
+
+Các trường hợp lỗi:
+
+- `401`: thiếu Access Token.
+- `403`: user hiện tại không phải chính chủ hoặc `ADMIN`; hoặc tài khoản đích đã bị vô hiệu hóa và user hiện tại không phải `ADMIN`.
+- `404`: user không tồn tại.
+- `500`: lỗi server hoặc database.
+
+# PATCH /api/users/:userId
+
+Dùng để cập nhật email của user. User chỉ được cập nhật chính mình; `ADMIN` có thể cập nhật mọi user và có thể đổi role.
+
+Request cần header:
+
+```http
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+Path parameter:
+
+- `userId`: UUID của user cần cập nhật.
+
+Request body:
+
+```json
+{
+  "email": "new-email@example.com",
+  "role": "CUSTOMER"
+}
+```
+
+- `email`: tùy chọn, email mới.
+- `role`: tùy chọn. Chỉ được cập nhật khi Access Token thuộc user có role `ADMIN`; user thường gửi trường này sẽ không được cập nhật role.
+- Cần gửi ít nhất một trường hợp lệ.
+
+Response thành công:
+
+```json
+{
+  "message": "Cập nhật người dùng thành công!",
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "email": "new-email@example.com",
+    "role": "CUSTOMER",
+    "is_active": true
+  }
+}
+```
+
+HTTP status: `200 OK`
+
+Các trường hợp lỗi:
+
+- `400`: email đã được dùng bởi user khác hoặc không có dữ liệu hợp lệ để cập nhật.
+- `401`: thiếu Access Token.
+- `403`: không có quyền cập nhật user hoặc tài khoản đích đã bị vô hiệu hóa.
+- `404`: user không tồn tại.
+- `500`: lỗi server hoặc database.
+
+# PATCH /api/users/:userId/status
+
+Chỉ dành cho `ADMIN`. Dùng để bật/tắt trạng thái hoạt động của một user.
+
+Request cần header:
+
+```http
+Authorization: Bearer <admin_access_token>
+```
+
+Path parameter:
+
+- `userId`: UUID của user cần thay đổi trạng thái.
+
+Request body không cần gửi.
+
+Response khi kích hoạt:
+
+```json
+{
+  "message": "Kích hoạt tài khoản thành công!",
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "email": "customer@example.com",
+    "role": "CUSTOMER",
+    "is_active": true
+  }
+}
+```
+
+Khi vô hiệu hóa, response có cùng cấu trúc nhưng `message` là `Vô hiệu hóa tài khoản thành công!` và `is_active` là `false`.
+
+HTTP status: `200 OK`
+
+Các trường hợp lỗi:
+
+- `400`: không thể thay đổi trạng thái của chính tài khoản đang đăng nhập.
+- `401`: thiếu Access Token.
+- `403`: Access Token không hợp lệ/hết hạn hoặc user không có role `ADMIN`.
+- `404`: user không tồn tại.
+- `500`: lỗi server hoặc database.
+
+# 4. Authentication Middleware
+
+Các middleware này đang được dùng trên nhóm API User.
 
 # verifyToken
 
-API private trong tương lai cần nhận header:
+API private cần nhận header:
 
 ```http
 Authorization: Bearer <access_token>
@@ -262,7 +515,7 @@ Chỉ cho phép user có `req.user.role = ADMIN`.
 - Không có user hoặc role khác `ADMIN`: trả `403`.
 - Nếu hợp lệ: chuyển request sang middleware/controller tiếp theo.
 
-# 4. API Chưa Triển Khai
+# 5. API Chưa Triển Khai
 
 Prisma đã có các model `Product`, `Cart`, `CartItem`, `Order` và `OrderItem`, nhưng hiện chưa có route/controller tương ứng và chưa được mount trong `server/index.js`.
 

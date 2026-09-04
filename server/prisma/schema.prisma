@@ -12,6 +12,7 @@ model User {
   email              String   @unique @db.VarChar(255)
   password_hash      String   @db.VarChar(255)
   role               Role     @default(CUSTOMER)
+  is_active          Boolean  @default(true)
   
   // --- BỔ SUNG ---
   is_verified        Boolean  @default(false)
