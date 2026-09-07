@@ -280,14 +280,19 @@ Các trường hợp lỗi:
 
 # POST /api/auth/logout
 
-Dùng để đăng xuất và xóa refresh token cookie.
+Dùng để đăng xuất và xóa refresh token cookie. API yêu cầu user đã đăng nhập.
 
-Request không cần body, query parameter hoặc path parameter. Nên bật credentials để browser xóa đúng cookie:
+Request cần Access Token và credentials:
+
+```http
+Authorization: Bearer <access_token>
+```
 
 ```js
 fetch('http://localhost:5000/api/auth/logout', {
   method: 'POST',
   credentials: 'include',
+  headers: { Authorization: 'Bearer <access_token>' },
 });
 ```
 
@@ -300,6 +305,11 @@ Response:
 ```
 
 HTTP status: `200 OK`
+
+Các trường hợp lỗi:
+
+- `401`: thiếu Access Token.
+- `403`: Access Token không hợp lệ hoặc đã hết hạn.
 
 # 3. User Management
 
@@ -515,13 +525,201 @@ Chỉ cho phép user có `req.user.role = ADMIN`.
 - Không có user hoặc role khác `ADMIN`: trả `403`.
 - Nếu hợp lệ: chuyển request sang middleware/controller tiếp theo.
 
-# 5. API Chưa Triển Khai
+# 5. Category Management
+
+# GET /api/categories
+
+Dùng để lấy danh sách tất cả danh mục. API public, không cần đăng nhập. Danh mục được sắp xếp theo `name` tăng dần.
+
+Request không cần query parameter, path parameter hoặc body.
+
+Response thành công:
+
+```json
+{
+  "data": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Electronics",
+      "description": "Electronic products",
+      "image_url": "https://example.com/electronics.jpg",
+      "created_at": "2026-09-07T08:30:00.000Z",
+      "updated_at": "2026-09-07T08:30:00.000Z"
+    }
+  ]
+}
+```
+
+HTTP status: `200 OK`
+
+- `500`: lỗi server hoặc database.
+
+# GET /api/categories/:categoryId
+
+Dùng để lấy thông tin một danh mục. API public.
+
+Path parameter: `categoryId` là UUID của danh mục.
+
+Response thành công: `200 OK`, trả `{ "data": <category> }`.
+
+Các trường hợp lỗi:
+
+- `404`: danh mục không tồn tại.
+- `500`: lỗi server hoặc database.
+
+# POST /api/categories
+
+Chỉ dành cho `ADMIN`. Dùng để tạo danh mục.
+
+Request cần header:
+
+```http
+Authorization: Bearer <admin_access_token>
+Content-Type: application/json
+```
+
+Request body:
+
+```json
+{
+  "name": "Electronics",
+  "description": "Electronic products",
+  "image_url": "https://example.com/electronics.jpg"
+}
+```
+
+- `name`: string, bắt buộc và duy nhất.
+- `description`, `image_url`: tùy chọn.
+
+Response thành công: `201 Created`, trả `{ "data": <category> }`.
+
+Các trường hợp lỗi:
+
+- `400`: thiếu tên hoặc danh mục đã tồn tại.
+- `401`: thiếu Access Token.
+- `403`: token không hợp lệ/hết hạn hoặc không phải `ADMIN`.
+- `500`: lỗi server hoặc database.
+
+# PATCH /api/categories/:categoryId
+
+Chỉ dành cho `ADMIN`. Dùng để cập nhật danh mục.
+
+Path parameter: `categoryId` là UUID của danh mục.
+
+Request body có thể gồm `name`, `description`, `image_url`. Response thành công: `200 OK`, trả `{ "data": <updated category> }`.
+
+Các trường hợp lỗi:
+
+- `400`: tên danh mục đã được sử dụng.
+- `401`: thiếu Access Token.
+- `403`: không có quyền `ADMIN`.
+- `404`: danh mục không tồn tại.
+- `500`: lỗi server hoặc database.
+
+# DELETE /api/categories/:categoryId
+
+Chỉ dành cho `ADMIN`. Dùng để xóa danh mục không có sản phẩm liên quan.
+
+Response thành công:
+
+```json
+{
+  "message": "Xóa danh mục thành công!"
+}
+```
+
+HTTP status: `200 OK`
+
+Các trường hợp lỗi:
+
+- `400`: danh mục đang có sản phẩm liên quan.
+- `401`: thiếu Access Token.
+- `403`: không có quyền `ADMIN`.
+- `404`: danh mục không tồn tại.
+- `500`: lỗi server hoặc database.
+
+# 6. Product Management
+
+# GET /api/products
+
+Dùng để lấy danh sách sản phẩm. API public; user thường chỉ thấy sản phẩm active. `ADMIN` có thể lọc theo trạng thái.
+
+Query parameters:
+
+- `page`, `limit`: phân trang, mặc định lần lượt `1` và `10`.
+- `keyword`: tìm theo tên sản phẩm.
+- `minPrice`, `maxPrice`: khoảng giá.
+- `category`: UUID của category.
+- `status`: với `ADMIN`, nhận `ACTIVE`, `INACTIVE` hoặc `ALL`; user public luôn chỉ nhận sản phẩm active.
+
+Response có dạng `{ "data": [<product with category>], "meta": { "total", "page", "limit", "totalPages" } }`.
+
+HTTP status: `200 OK`; `500` nếu lỗi server hoặc database.
+
+# GET /api/products/:productId
+
+Dùng để lấy chi tiết sản phẩm. API public; sản phẩm inactive chỉ hiển thị cho `ADMIN` có token hợp lệ.
+
+Path parameter: `productId` là UUID của sản phẩm.
+
+Response thành công: `200 OK`, trả `{ "data": <product with category> }`, gồm `images`, `category_id` và category rút gọn.
+
+Các trường hợp lỗi:
+
+- `404`: sản phẩm không tồn tại hoặc đang inactive với user thường.
+- `500`: lỗi server hoặc database.
+
+# POST /api/products
+
+Chỉ dành cho `ADMIN`. Dùng để tạo sản phẩm.
+
+Request body:
+
+```json
+{
+  "name": "Keyboard",
+  "description": "Mechanical keyboard",
+  "price": 99.99,
+  "stock_quantity": 20,
+  "category_id": "550e8400-e29b-41d4-a716-446655440000",
+  "images": ["https://example.com/keyboard.jpg"]
+}
+```
+
+- `name`, `price`: bắt buộc.
+- `description`, `stock_quantity`, `category_id`, `images`: tùy chọn; `stock_quantity` mặc định `0`, `images` mặc định `[]`.
+- Cần gửi `Authorization: Bearer <admin_access_token>` và `Content-Type: application/json`.
+
+Response thành công: `201 Created`, trả `{ "data": <product> }`.
+
+Các trường hợp lỗi: `400` nếu thiếu tên/giá; `401` nếu thiếu token; `403` nếu không phải `ADMIN`; `500` nếu lỗi server/database.
+
+# PATCH /api/products/:productId
+
+Chỉ dành cho `ADMIN`. Dùng để cập nhật sản phẩm.
+
+Path parameter: `productId` là UUID sản phẩm.
+
+Request body có thể gồm `name`, `description`, `price`, `stock_quantity`, `category_id`, `images`, `is_active`.
+
+Response thành công: `200 OK`, trả `{ "data": <updated product> }`.
+
+Các trường hợp lỗi: `401` nếu thiếu token; `403` nếu không phải `ADMIN`; `404` nếu sản phẩm không tồn tại; `500` nếu lỗi server/database.
+
+# DELETE /api/products/:productId
+
+Chỉ dành cho `ADMIN`. Đây là soft delete: backend cập nhật `is_active = false`, không xóa record.
+
+Response thành công: `200 OK`, trả `{ "data": <deactivated product> }`.
+
+Các trường hợp lỗi: `401` nếu thiếu token; `403` nếu không phải `ADMIN`; `404` nếu sản phẩm không tồn tại; `500` nếu lỗi server/database.
+
+# 7. API Chưa Triển Khai
 
 Prisma đã có các model `Product`, `Cart`, `CartItem`, `Order` và `OrderItem`, nhưng hiện chưa có route/controller tương ứng và chưa được mount trong `server/index.js`.
 
 Vì vậy các API sau chưa được hỗ trợ:
 
-- `/api/products`
 - `/api/cart`
 - `/api/orders`
 - Các API Series Registry, Revenue Right Token, Multisig, Revenue Share Vault và Marketplace trong tài liệu contract khác.
