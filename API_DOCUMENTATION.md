@@ -714,13 +714,182 @@ Response thành công: `200 OK`, trả `{ "data": <deactivated product> }`.
 
 Các trường hợp lỗi: `401` nếu thiếu token; `403` nếu không phải `ADMIN`; `404` nếu sản phẩm không tồn tại; `500` nếu lỗi server/database.
 
-# 7. API Chưa Triển Khai
+# 7. Cart Management
 
-Prisma đã có các model `Product`, `Cart`, `CartItem`, `Order` và `OrderItem`, nhưng hiện chưa có route/controller tương ứng và chưa được mount trong `server/index.js`.
+Tất cả API Cart đều yêu cầu:
+
+```http
+Authorization: Bearer <access_token>
+```
+
+Giỏ hàng được xác định theo user ID trong trường `sub` của JWT.
+
+# GET /api/cart
+
+Dùng để lấy giỏ hàng của user đang đăng nhập. Nếu user chưa có giỏ hàng, backend sẽ tạo giỏ hàng rỗng.
+
+Request không cần query parameter hoặc body.
+
+Response thành công:
+
+```json
+{
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "userId": "650e8400-e29b-41d4-a716-446655440000",
+    "items": [
+      {
+        "id": "750e8400-e29b-41d4-a716-446655440000",
+        "productId": "850e8400-e29b-41d4-a716-446655440000",
+        "name": "Keyboard",
+        "price": 99.99,
+        "quantity": 2,
+        "image": "https://example.com/keyboard.jpg",
+        "is_active": true,
+        "itemTotal": 199.98
+      }
+    ],
+    "totalAmount": 199.98
+  }
+}
+```
+
+HTTP status: `200 OK`
+
+- `401`: thiếu Access Token.
+- `403`: Access Token không hợp lệ hoặc đã hết hạn.
+- `500`: lỗi server hoặc database.
+
+# POST /api/cart/items
+
+Dùng để thêm sản phẩm vào giỏ hàng. Nếu sản phẩm đã có trong giỏ, số lượng mới sẽ được cộng vào số lượng hiện tại.
+
+Request body:
+
+```json
+{
+  "productId": "850e8400-e29b-41d4-a716-446655440000",
+  "quantity": 2
+}
+```
+
+- `productId`: UUID sản phẩm, bắt buộc.
+- `quantity`: số nguyên lớn hơn `0`, bắt buộc.
+- Sản phẩm phải tồn tại, đang active và `quantity` không được vượt `stock_quantity`.
+- Khi sản phẩm đã có trong giỏ, tổng số lượng hiện tại cộng số lượng mới cũng không được vượt `stock_quantity`.
+
+Response thành công: `200 OK`, gồm message `Sản phẩm đã được thêm vào giỏ hàng` và dữ liệu giỏ hàng hiện tại trong `data`.
+
+Các trường hợp lỗi:
+
+- `400`: dữ liệu không hợp lệ, quantity vượt tồn kho hoặc tổng số lượng trong giỏ vượt tồn kho.
+- `401`: thiếu Access Token.
+- `403`: Access Token không hợp lệ hoặc đã hết hạn.
+- `404`: sản phẩm không tồn tại hoặc không khả dụng.
+- `500`: lỗi server hoặc database.
+
+# PATCH /api/cart/items/:itemId
+
+Dùng để thay thế số lượng của một item trong giỏ hàng.
+
+Path parameter: `itemId` là UUID của CartItem.
+
+Request body:
+
+```json
+{
+  "quantity": 3
+}
+```
+
+`quantity` phải là số nguyên lớn hơn `0`, không vượt tồn kho và sản phẩm phải còn active.
+
+Response thành công: `200 OK`, gồm message `Cập nhật số lượng thành công` và giỏ hàng mới trong `data`.
+
+Các trường hợp lỗi:
+
+- `400`: quantity không hợp lệ, vượt tồn kho hoặc sản phẩm không còn khả dụng.
+- `401`: thiếu Access Token.
+- `403`: Access Token không hợp lệ hoặc đã hết hạn.
+- `404`: giỏ hàng hoặc CartItem không tồn tại.
+- `500`: lỗi server hoặc database.
+
+# DELETE /api/cart/items/:itemId
+
+Dùng để xóa một sản phẩm khỏi giỏ hàng của user đang đăng nhập.
+
+Path parameter: `itemId` là UUID của CartItem.
+
+Response thành công: `200 OK`, gồm message `Xóa sản phẩm khỏi giỏ hàng thành công` và giỏ hàng mới trong `data`.
+
+Các trường hợp lỗi:
+
+- `401`: thiếu Access Token.
+- `403`: Access Token không hợp lệ hoặc đã hết hạn.
+- `404`: giỏ hàng hoặc sản phẩm không tồn tại trong giỏ.
+- `500`: lỗi server hoặc database.
+
+# POST /api/cart/sync
+
+Dùng để đồng bộ các item từ giỏ hàng local của Frontend vào giỏ hàng database sau khi user đăng nhập.
+
+Request body:
+
+```json
+{
+  "localItems": [
+    {
+      "productId": "850e8400-e29b-41d4-a716-446655440000",
+      "quantity": 2
+    }
+  ]
+}
+```
+
+- `localItems`: array không rỗng.
+- Mỗi item phải có `productId` hợp lệ và `quantity` là số nguyên lớn hơn `0`.
+- Sản phẩm phải tồn tại, active và số lượng không vượt tồn kho.
+
+Response thành công: `200 OK`, gồm message `Đồng bộ giỏ hàng thành công` và giỏ hàng mới trong `data`.
+
+Các trường hợp lỗi:
+
+- `400`: dữ liệu localItems không hợp lệ, sản phẩm không khả dụng hoặc số lượng vượt tồn kho.
+- `401`: thiếu Access Token.
+- `403`: Access Token không hợp lệ hoặc đã hết hạn.
+- `500`: lỗi server hoặc database.
+
+# DELETE /api/cart
+
+Dùng để xóa toàn bộ sản phẩm khỏi giỏ hàng của user đang đăng nhập.
+
+Response thành công:
+
+```json
+{
+  "message": "Xóa tất cả sản phẩm khỏi giỏ hàng thành công",
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "userId": "650e8400-e29b-41d4-a716-446655440000",
+    "items": [],
+    "totalAmount": 0
+  }
+}
+```
+
+Các trường hợp lỗi:
+
+- `401`: thiếu Access Token.
+- `403`: Access Token không hợp lệ hoặc đã hết hạn.
+- `404`: giỏ hàng không tồn tại.
+- `500`: lỗi server hoặc database.
+
+# 8. API Chưa Triển Khai
+
+Prisma đã có các model `Product`, `Cart`, `CartItem`, `Order` và `OrderItem`; nhóm API Cart đã được triển khai ở phần trên. Nhóm Orders hiện chưa có route/controller và chưa được mount trong `server/index.js`.
 
 Vì vậy các API sau chưa được hỗ trợ:
 
-- `/api/cart`
 - `/api/orders`
 - Các API Series Registry, Revenue Right Token, Multisig, Revenue Share Vault và Marketplace trong tài liệu contract khác.
 
