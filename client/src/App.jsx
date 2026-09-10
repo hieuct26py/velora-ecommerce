@@ -4,7 +4,7 @@ function App() {
   const [data, setData] = useState(null);
 
   useEffect(() => {
-    fetch('/api/health')
+    fetch('/api/v1/health')
       .then((res) => res.json())
       .then((data) => setData(data.message));
   }, []);
