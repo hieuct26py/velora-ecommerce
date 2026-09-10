@@ -2,14 +2,14 @@
 
 Backend hiện chạy bằng Express tại `http://localhost:5000`.
 
-- Các API được mount dưới prefix `/api`.
+- Các API được mount dưới prefix `/api/v1`.
 - Request có body dùng JSON cần gửi `Content-Type: application/json`.
 - API Auth là public. Các API User yêu cầu Access Token; một số API chỉ dành cho `ADMIN` hoặc chính chủ tài khoản.
 - API cần cookie phải bật credentials ở phía Frontend.
 
 # 1. Health Check
 
-# GET /api/health
+# GET /api/v1/health
 
 Dùng để kiểm tra backend đang hoạt động.
 
@@ -28,7 +28,7 @@ HTTP status: `200 OK`
 
 # 2. Authentication
 
-# POST /api/auth/register
+# POST /api/v1/auth/register
 
 Dùng để tạo tài khoản mới. Tài khoản đăng ký từ API này luôn có role `CUSTOMER`.
 
@@ -99,7 +99,7 @@ Các trường hợp lỗi:
 }
 ```
 
-# POST /api/auth/login
+# POST /api/v1/auth/login
 
 Dùng để đăng nhập bằng email và password.
 
@@ -172,7 +172,7 @@ Các trường hợp lỗi:
 }
 ```
 
-# PATCH /api/auth/change-password
+# PATCH /api/v1/auth/change-password
 
 Dùng để đổi mật khẩu của user đang đăng nhập.
 
@@ -230,7 +230,7 @@ Các trường hợp lỗi:
 - `404`: user trong Access Token không còn tồn tại.
 - `500`: lỗi server hoặc database.
 
-# POST /api/auth/refresh-token
+# POST /api/v1/auth/refresh-token
 
 Dùng refresh token trong cookie để cấp access token mới.
 
@@ -244,7 +244,7 @@ Request:
 Frontend cần bật credentials:
 
 ```js
-fetch('http://localhost:5000/api/auth/refresh-token', {
+fetch('http://localhost:5000/api/v1/auth/refresh-token', {
   method: 'POST',
   credentials: 'include',
 });
@@ -278,7 +278,7 @@ Các trường hợp lỗi:
 }
 ```
 
-# POST /api/auth/logout
+# POST /api/v1/auth/logout
 
 Dùng để đăng xuất và xóa refresh token cookie. API yêu cầu user đã đăng nhập.
 
@@ -289,7 +289,7 @@ Authorization: Bearer <access_token>
 ```
 
 ```js
-fetch('http://localhost:5000/api/auth/logout', {
+fetch('http://localhost:5000/api/v1/auth/logout', {
   method: 'POST',
   credentials: 'include',
   headers: { Authorization: 'Bearer <access_token>' },
@@ -313,7 +313,7 @@ Các trường hợp lỗi:
 
 # 3. User Management
 
-# GET /api/users
+# GET /api/v1/users
 
 Chỉ dành cho `ADMIN`. Dùng để lấy danh sách người dùng, có phân trang và lọc theo trạng thái hoạt động.
 
@@ -332,7 +332,7 @@ Query parameters:
 Ví dụ:
 
 ```http
-GET /api/users?page=1&limit=10&status=active
+GET /api/v1/users?page=1&limit=10&status=active
 ```
 
 Response thành công:
@@ -365,7 +365,7 @@ Các trường hợp lỗi:
 - `403`: Access Token không hợp lệ/hết hạn hoặc user không có role `ADMIN`.
 - `500`: lỗi server hoặc database.
 
-# GET /api/users/:userId
+# GET /api/v1/users/:userId
 
 Dùng để lấy thông tin một user. User chỉ được xem chính mình; `ADMIN` được xem mọi user.
 
@@ -382,7 +382,7 @@ Path parameter:
 Ví dụ:
 
 ```http
-GET /api/users/550e8400-e29b-41d4-a716-446655440000
+GET /api/v1/users/550e8400-e29b-41d4-a716-446655440000
 ```
 
 Response thành công:
@@ -408,7 +408,7 @@ Các trường hợp lỗi:
 - `404`: user không tồn tại.
 - `500`: lỗi server hoặc database.
 
-# PATCH /api/users/:userId
+# PATCH /api/v1/users/:userId
 
 Dùng để cập nhật email của user. User chỉ được cập nhật chính mình; `ADMIN` có thể cập nhật mọi user và có thể đổi role.
 
@@ -460,7 +460,7 @@ Các trường hợp lỗi:
 - `404`: user không tồn tại.
 - `500`: lỗi server hoặc database.
 
-# PATCH /api/users/:userId/status
+# PATCH /api/v1/users/:userId/status
 
 Chỉ dành cho `ADMIN`. Dùng để bật/tắt trạng thái hoạt động của một user.
 
@@ -527,7 +527,7 @@ Chỉ cho phép user có `req.user.role = ADMIN`.
 
 # 5. Category Management
 
-# GET /api/categories
+# GET /api/v1/categories
 
 Dùng để lấy danh sách tất cả danh mục. API public, không cần đăng nhập. Danh mục được sắp xếp theo `name` tăng dần.
 
@@ -554,7 +554,7 @@ HTTP status: `200 OK`
 
 - `500`: lỗi server hoặc database.
 
-# GET /api/categories/:categoryId
+# GET /api/v1/categories/:categoryId
 
 Dùng để lấy thông tin một danh mục. API public.
 
@@ -567,7 +567,7 @@ Các trường hợp lỗi:
 - `404`: danh mục không tồn tại.
 - `500`: lỗi server hoặc database.
 
-# POST /api/categories
+# POST /api/v1/categories
 
 Chỉ dành cho `ADMIN`. Dùng để tạo danh mục.
 
@@ -600,7 +600,7 @@ Các trường hợp lỗi:
 - `403`: token không hợp lệ/hết hạn hoặc không phải `ADMIN`.
 - `500`: lỗi server hoặc database.
 
-# PATCH /api/categories/:categoryId
+# PATCH /api/v1/categories/:categoryId
 
 Chỉ dành cho `ADMIN`. Dùng để cập nhật danh mục.
 
@@ -616,7 +616,7 @@ Các trường hợp lỗi:
 - `404`: danh mục không tồn tại.
 - `500`: lỗi server hoặc database.
 
-# DELETE /api/categories/:categoryId
+# DELETE /api/v1/categories/:categoryId
 
 Chỉ dành cho `ADMIN`. Dùng để xóa danh mục không có sản phẩm liên quan.
 
@@ -640,7 +640,7 @@ Các trường hợp lỗi:
 
 # 6. Product Management
 
-# GET /api/products
+# GET /api/v1/products
 
 Dùng để lấy danh sách sản phẩm. API public; user thường chỉ thấy sản phẩm active. `ADMIN` có thể lọc theo trạng thái.
 
@@ -656,7 +656,7 @@ Response có dạng `{ "data": [<product with category>], "meta": { "total", "pa
 
 HTTP status: `200 OK`; `500` nếu lỗi server hoặc database.
 
-# GET /api/products/:productId
+# GET /api/v1/products/:productId
 
 Dùng để lấy chi tiết sản phẩm. API public; sản phẩm inactive chỉ hiển thị cho `ADMIN` có token hợp lệ.
 
@@ -669,7 +669,7 @@ Các trường hợp lỗi:
 - `404`: sản phẩm không tồn tại hoặc đang inactive với user thường.
 - `500`: lỗi server hoặc database.
 
-# POST /api/products
+# POST /api/v1/products
 
 Chỉ dành cho `ADMIN`. Dùng để tạo sản phẩm.
 
@@ -694,7 +694,7 @@ Response thành công: `201 Created`, trả `{ "data": <product> }`.
 
 Các trường hợp lỗi: `400` nếu thiếu tên/giá; `401` nếu thiếu token; `403` nếu không phải `ADMIN`; `500` nếu lỗi server/database.
 
-# PATCH /api/products/:productId
+# PATCH /api/v1/products/:productId
 
 Chỉ dành cho `ADMIN`. Dùng để cập nhật sản phẩm.
 
@@ -706,7 +706,7 @@ Response thành công: `200 OK`, trả `{ "data": <updated product> }`.
 
 Các trường hợp lỗi: `401` nếu thiếu token; `403` nếu không phải `ADMIN`; `404` nếu sản phẩm không tồn tại; `500` nếu lỗi server/database.
 
-# DELETE /api/products/:productId
+# DELETE /api/v1/products/:productId
 
 Chỉ dành cho `ADMIN`. Đây là soft delete: backend cập nhật `is_active = false`, không xóa record.
 
@@ -724,7 +724,7 @@ Authorization: Bearer <access_token>
 
 Giỏ hàng được xác định theo user ID trong trường `sub` của JWT.
 
-# GET /api/cart
+# GET /api/v1/cart
 
 Dùng để lấy giỏ hàng của user đang đăng nhập. Nếu user chưa có giỏ hàng, backend sẽ tạo giỏ hàng rỗng.
 
@@ -760,7 +760,7 @@ HTTP status: `200 OK`
 - `403`: Access Token không hợp lệ hoặc đã hết hạn.
 - `500`: lỗi server hoặc database.
 
-# POST /api/cart/items
+# POST /api/v1/cart/items
 
 Dùng để thêm sản phẩm vào giỏ hàng. Nếu sản phẩm đã có trong giỏ, số lượng mới sẽ được cộng vào số lượng hiện tại.
 
@@ -788,7 +788,7 @@ Các trường hợp lỗi:
 - `404`: sản phẩm không tồn tại hoặc không khả dụng.
 - `500`: lỗi server hoặc database.
 
-# PATCH /api/cart/items/:itemId
+# PATCH /api/v1/cart/items/:itemId
 
 Dùng để thay thế số lượng của một item trong giỏ hàng.
 
@@ -814,7 +814,7 @@ Các trường hợp lỗi:
 - `404`: giỏ hàng hoặc CartItem không tồn tại.
 - `500`: lỗi server hoặc database.
 
-# DELETE /api/cart/items/:itemId
+# DELETE /api/v1/cart/items/:itemId
 
 Dùng để xóa một sản phẩm khỏi giỏ hàng của user đang đăng nhập.
 
@@ -829,7 +829,7 @@ Các trường hợp lỗi:
 - `404`: giỏ hàng hoặc sản phẩm không tồn tại trong giỏ.
 - `500`: lỗi server hoặc database.
 
-# POST /api/cart/sync
+# POST /api/v1/cart/sync
 
 Dùng để đồng bộ các item từ giỏ hàng local của Frontend vào giỏ hàng database sau khi user đăng nhập.
 
@@ -859,7 +859,7 @@ Các trường hợp lỗi:
 - `403`: Access Token không hợp lệ hoặc đã hết hạn.
 - `500`: lỗi server hoặc database.
 
-# DELETE /api/cart
+# DELETE /api/v1/cart
 
 Dùng để xóa toàn bộ sản phẩm khỏi giỏ hàng của user đang đăng nhập.
 
@@ -884,13 +884,151 @@ Các trường hợp lỗi:
 - `404`: giỏ hàng không tồn tại.
 - `500`: lỗi server hoặc database.
 
-# 8. API Chưa Triển Khai
+# 8. Order Management
 
-Prisma đã có các model `Product`, `Cart`, `CartItem`, `Order` và `OrderItem`; nhóm API Cart đã được triển khai ở phần trên. Nhóm Orders hiện chưa có route/controller và chưa được mount trong `server/index.js`.
+Tất cả API Order đều yêu cầu:
+
+```http
+Authorization: Bearer <access_token>
+```
+
+# POST /api/v1/orders
+
+Dùng để tạo đơn hàng từ toàn bộ sản phẩm trong giỏ hàng của user đang đăng nhập. Backend tự tính tổng tiền, lưu giá tại thời điểm mua, trừ tồn kho và xóa các item khỏi giỏ hàng.
+
+Request không cần body. `userId` và tổng tiền được lấy từ Access Token và database, không nhận từ Frontend.
+
+Sản phẩm phải active và số lượng trong giỏ không được vượt tồn kho.
+
+Response thành công: `201 Created`.
+
+```json
+{
+  "message": "Đơn hàng đã được tạo thành công!",
+  "order": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "user_id": "650e8400-e29b-41d4-a716-446655440000",
+    "total_amount": 199.98,
+    "status": "PENDING"
+  }
+}
+```
+
+Các trường hợp lỗi:
+
+- `400`: giỏ hàng trống, sản phẩm không khả dụng hoặc không đủ tồn kho.
+- `401`: thiếu Access Token.
+- `403`: Access Token không hợp lệ hoặc đã hết hạn.
+- `500`: lỗi server hoặc database.
+
+# GET /api/v1/orders/me
+
+Dùng để lấy toàn bộ đơn hàng của user đang đăng nhập, sắp xếp mới nhất trước.
+
+Request không cần query parameter hoặc body.
+
+Response thành công: `200 OK`, trả `{ "data": [<orders của user>] }`. Mỗi order gồm các item và thông tin sản phẩm (`name`, `images`); các trường tiền được trả về dạng number.
+
+Các trường hợp lỗi: `401` nếu thiếu token; `403` nếu token không hợp lệ/hết hạn; `500` nếu lỗi server/database.
+
+# GET /api/v1/orders
+
+Chỉ dành cho `ADMIN`. Dùng để xem danh sách tất cả đơn hàng có phân trang và lọc trạng thái.
+
+Query parameters:
+
+- `page`: số trang, mặc định `1`.
+- `limit`: số đơn mỗi trang, mặc định `10`.
+- `status`: tùy chọn, nhận `PENDING`, `PAID` hoặc `CANCELLED`.
+
+Response thành công: `200 OK`, trả `{ "data": [<orders>] , "meta": { "total", "page", "limit", "totalPages" } }`.
+
+Các trường hợp lỗi: `400` nếu status không hợp lệ; `401` nếu thiếu token; `403` nếu không phải `ADMIN`; `500` nếu lỗi server/database.
+
+# GET /api/v1/orders/:orderId
+
+Dùng để lấy chi tiết đơn hàng. User chỉ xem được đơn của mình; `ADMIN` xem được mọi đơn.
+
+Path parameter: `orderId` là UUID của đơn hàng.
+
+Response thành công: `200 OK`, trả `{ "data": <order> }`.
+
+Các trường hợp lỗi: `401` nếu thiếu token; `403` nếu không có quyền; `404` nếu đơn hàng không tồn tại; `500` nếu lỗi server/database.
+
+# PATCH /api/v1/orders/:orderId/status
+
+Chỉ dành cho `ADMIN`. Dùng để cập nhật trạng thái đơn hàng.
+
+Request body:
+
+```json
+{
+  "status": "PAID"
+}
+```
+
+`status` chỉ nhận `PENDING`, `PAID` hoặc `CANCELLED`.
+
+Response thành công: `200 OK`, trả message `Cập nhật trạng thái đơn hàng thành công` và order trong `data`.
+
+Các trường hợp lỗi: `400` nếu status không hợp lệ; `401` nếu thiếu token; `403` nếu không phải `ADMIN`; `404` nếu order không tồn tại; `500` nếu lỗi server/database.
+
+# PATCH /api/v1/orders/:orderId
+
+Dùng để hủy đơn hàng đang `PENDING`. User chỉ hủy được đơn của mình; `ADMIN` có thể hủy mọi đơn.
+
+Request không cần body. Backend đổi status thành `CANCELLED` và hoàn lại số lượng sản phẩm vào tồn kho.
+
+Response thành công:
+
+```json
+{
+  "message": "Xóa đơn hàng thành công"
+}
+```
+
+Các trường hợp lỗi: `400` nếu đơn không ở trạng thái `PENDING`; `401` nếu thiếu token; `403` nếu không có quyền; `404` nếu order không tồn tại; `500` nếu lỗi server/database.
+
+# 9. Analytics
+
+Tất cả API Analytics chỉ dành cho `ADMIN` và yêu cầu `Authorization: Bearer <admin_access_token>`.
+
+# GET /api/v1/analytics/total-sales
+
+Dùng để lấy tổng doanh thu của các đơn hàng có trạng thái `PAID`.
+
+Request không cần query parameter hoặc body.
+
+Response thành công:
+
+```json
+{
+  "data": 199.98
+}
+```
+
+HTTP status: `200 OK`. `401` nếu thiếu token, `403` nếu không phải `ADMIN`, `500` nếu lỗi server/database.
+
+# GET /api/v1/analytics/total-orders
+
+Dùng để lấy tổng số đơn hàng trong database, không lọc theo trạng thái.
+
+Response thành công:
+
+```json
+{
+  "data": 12
+}
+```
+
+HTTP status: `200 OK`. `401` nếu thiếu token, `403` nếu không phải `ADMIN`, `500` nếu lỗi server/database.
+
+# 10. API Chưa Triển Khai
+
+Prisma đã có các model `Product`, `Cart`, `CartItem`, `Order` và `OrderItem`; các nhóm API Cart, Order và Analytics đã được triển khai ở phần trên.
 
 Vì vậy các API sau chưa được hỗ trợ:
 
-- `/api/orders`
 - Các API Series Registry, Revenue Right Token, Multisig, Revenue Share Vault và Marketplace trong tài liệu contract khác.
 
 Không gọi các endpoint trên từ Frontend cho đến khi backend bổ sung route, controller và contract request/response tương ứng.
