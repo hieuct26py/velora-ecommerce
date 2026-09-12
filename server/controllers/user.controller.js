@@ -1,10 +1,74 @@
 import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
+const profileSelect = {
+    id: true,
+    email: true,
+    name: true,
+    avatar_url: true,
+    role: true,
+    is_active: true,
+    created_at: true,
+};
+
+export const getMe = async (req, res) => {
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: req.user.sub },
+            select: profileSelect,
+        });
+
+        if (!user) {
+            return res.status(404).json({ message: 'Người dùng không tồn tại!' });
+        }
+
+        return res.status(200).json({ data: user });
+    } catch (error) {
+        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+    }
+};
+
+export const updateMe = async (req, res) => {
+    try {
+        const { name, avatar_url: avatarUrl } = req.body;
+        const data = {};
+
+        if (name !== undefined) {
+            const normalizedName = String(name).trim();
+            if (normalizedName.length > 120) {
+                return res.status(400).json({ message: 'Tên không được dài quá 120 ký tự!' });
+            }
+            data.name = normalizedName || null;
+        }
+
+        if (avatarUrl !== undefined) {
+            const normalizedAvatarUrl = String(avatarUrl).trim();
+            if (normalizedAvatarUrl.length > 255) {
+                return res.status(400).json({ message: 'Avatar URL không được dài quá 255 ký tự!' });
+            }
+            data.avatar_url = normalizedAvatarUrl || null;
+        }
+
+        if (!Object.keys(data).length) {
+            return res.status(400).json({ message: 'Không có dữ liệu hợp lệ để cập nhật!' });
+        }
+
+        const user = await prisma.user.update({
+            where: { id: req.user.sub },
+            data,
+            select: profileSelect,
+        });
+
+        return res.status(200).json({ message: 'Cập nhật hồ sơ thành công!', data: user });
+    } catch (error) {
+        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+    }
+};
+
 export const getAllUsers = async (req, res) => {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 10;
+        const page = Number.parseInt(req.query.page) || 1;
+        const limit = Number.parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
 
         let whereCondition = {};

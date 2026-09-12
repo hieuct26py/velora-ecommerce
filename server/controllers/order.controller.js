@@ -37,7 +37,7 @@ export const createOrder = async (req, res) => {
             const orderItemsData = [];
             for (const item of cart.items) {
                 orderItemsData.push({
-                    order_id: order.id,
+                    order_id: newOrder.id,
                     product_id: item.product_id,
                     quantity: item.quantity,
                     price_at_purchase: item.product.price

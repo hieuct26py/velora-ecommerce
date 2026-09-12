@@ -502,6 +502,27 @@ Các trường hợp lỗi:
 - `404`: user không tồn tại.
 - `500`: lỗi server hoặc database.
 
+# GET /api/v1/users/me
+
+Dùng để lấy hồ sơ của user đang đăng nhập. API yêu cầu Access Token.
+
+Response thành công gồm `id`, `email`, `name`, `avatar_url`, `role`, `is_active` và `created_at` trong trường `data`.
+
+# PATCH /api/v1/users/me
+
+Dùng để cập nhật `name` và `avatar_url` của chính user đang đăng nhập. API yêu cầu Access Token.
+
+Request body:
+
+```json
+{
+  "name": "Customer Name",
+  "avatar_url": "https://example.com/avatar.jpg"
+}
+```
+
+Các trường có thể gửi riêng lẻ. `name` tối đa 120 ký tự và `avatar_url` tối đa 255 ký tự.
+
 # 4. Authentication Middleware
 
 Các middleware này đang được dùng trên nhóm API User.
