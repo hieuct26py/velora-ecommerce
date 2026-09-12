@@ -3,6 +3,7 @@ import { Link, useRoute } from '../router';
 import { orderApi } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import StatusLabel from '../components/StatusLabel';
+import ConfirmModal from '../components/ConfirmModal';
 
 export default function OrderDetail() {
   const { path } = useRoute();
@@ -13,6 +14,7 @@ export default function OrderDetail() {
   const [error, setError] = useState('');
   const [cancelMessage, setCancelMessage] = useState('');
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     if (!orderId || !isAuthenticated || isBooting) return;
@@ -30,9 +32,6 @@ export default function OrderDetail() {
 
   const handleCancelOrder = async () => {
     if (!order || order.status !== 'PENDING') return;
-    if (!window.confirm('Are you sure you want to cancel this order? Reserved stock will be returned.')) {
-      return;
-    }
 
     setIsCancelling(true);
     setError('');
@@ -40,8 +39,10 @@ export default function OrderDetail() {
       await orderApi.cancel(order.id);
       setOrder((prev) => (prev ? { ...prev, status: 'CANCELLED' } : prev));
       setCancelMessage('Order cancelled successfully. Reserved items have been returned to stock.');
+      setIsModalOpen(false);
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Failed to cancel order.');
+      setIsModalOpen(false);
     } finally {
       setIsCancelling(false);
     }
@@ -199,7 +200,7 @@ export default function OrderDetail() {
               <button
                 className="button button-danger button-full"
                 type="button"
-                onClick={handleCancelOrder}
+                onClick={() => setIsModalOpen(true)}
                 disabled={isCancelling}
               >
                 {isCancelling ? 'Cancelling order...' : 'Cancel order'}
@@ -223,6 +224,23 @@ export default function OrderDetail() {
           )}
         </aside>
       </div>
+
+      <ConfirmModal
+        isOpen={isModalOpen}
+        title="Cancel this order?"
+        message={
+          <div>
+            <p>Are you sure you want to cancel order <strong>#{order.id.slice(0, 8)}</strong>?</p>
+            <p style={{ marginTop: '8px', color: 'var(--ink-soft)' }}>Reserved items will be immediately returned to store inventory.</p>
+          </div>
+        }
+        confirmLabel="Yes, cancel order"
+        cancelLabel="Keep order"
+        isDestructive={true}
+        isLoading={isCancelling}
+        onConfirm={handleCancelOrder}
+        onCancel={() => setIsModalOpen(false)}
+      />
     </main>
   );
 }

@@ -1,10 +1,24 @@
 import { useEffect, useState } from 'react';
 import { adminProductApi, catalogApi } from '../api';
+import ConfirmModal from '../components/ConfirmModal';
 
-const emptyForm = { name: '', description: '', price: '', stock_quantity: 0, category_id: '', images: '', is_active: true };
+const emptyForm = {
+  name: '',
+  description: '',
+  price: '',
+  stock_quantity: 0,
+  category_id: '',
+  images: '',
+  is_active: true,
+};
 
 function formFromProduct(product) {
-  return { ...product, price: product.price ?? '', images: product.images?.join('\n') || '' };
+  return {
+    ...product,
+    price: product.price ?? '',
+    stock_quantity: product.stock_quantity ?? 0,
+    images: product.images?.join('\n') || '',
+  };
 }
 
 export default function AdminProducts() {
@@ -17,6 +31,10 @@ export default function AdminProducts() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+
+  // Task 11: Modals
+  const [deactivateProduct, setDeactivateProduct] = useState(null);
+  const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
 
   const loadProducts = async () => {
     setLoading(true);
@@ -52,6 +70,14 @@ export default function AdminProducts() {
     setEditingId(null);
   };
 
+  const handleCancelEditClick = () => {
+    if (editingId) {
+      setIsCancelConfirmOpen(true);
+    } else {
+      resetForm();
+    }
+  };
+
   const submit = async (event) => {
     event.preventDefault();
     setSaving(true);
@@ -59,9 +85,9 @@ export default function AdminProducts() {
     setNotice('');
     const payload = {
       name: form.name.trim(),
-      description: form.description.trim() || undefined,
+      description: form.description?.trim() || undefined,
       price: Number(form.price),
-      stock_quantity: Number(form.stock_quantity),
+      stock_quantity: Math.max(0, parseInt(form.stock_quantity, 10) || 0),
       category_id: form.category_id || null,
       images: form.images.split('\n').map((image) => image.trim()).filter(Boolean),
       ...(editingId ? { is_active: form.is_active } : {}),
@@ -86,44 +112,249 @@ export default function AdminProducts() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const removeProduct = async (product) => {
-    if (!window.confirm(`Deactivate ${product.name}?`)) return;
+  const confirmDeactivate = async () => {
+    if (!deactivateProduct) return;
     try {
-      await adminProductApi.remove(product.id);
-      setNotice('Product deactivated.');
+      await adminProductApi.remove(deactivateProduct.id);
+      setNotice(`Product "${deactivateProduct.name}" deactivated.`);
+      setDeactivateProduct(null);
       await loadProducts();
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'The product could not be deactivated.');
+      setDeactivateProduct(null);
     }
   };
 
   let submitLabel = 'Create product';
   if (saving) submitLabel = 'Saving...';
   else if (editingId) submitLabel = 'Save changes';
-  const formModeLabel = editingId ? 'Edit product' : 'New product';
-  const formHeading = editingId ? 'Refine the record.' : 'Add to the collection.';
-  let inventoryContent = <div className="admin-loading">No products in this view.</div>;
-  if (loading) inventoryContent = <div className="admin-loading">Loading inventory...</div>;
-  else if (products.length > 0) inventoryContent = <div className="admin-table">{products.map((product) => <article className="admin-product-row" key={product.id}><div className="admin-product-thumb">{product.images?.[0] ? <img src={product.images[0]} alt="" /> : <span>No image</span>}</div><div className="admin-product-name"><strong>{product.name}</strong><span>{product.category?.name || 'Uncategorized'}</span></div><span className="admin-table-number">${Number(product.price).toFixed(2)}</span><span className={`admin-state-tag ${product.is_active ? 'is-active' : 'is-inactive'}`}>{product.is_active ? 'Active' : 'Inactive'}</span><span className="admin-table-number">{product.stock_quantity}</span><div className="admin-row-actions"><button type="button" onClick={() => editProduct(product)}>Edit</button>{product.is_active && <button className="danger-text" type="button" onClick={() => removeProduct(product)}>Deactivate</button>}</div></article>)}</div>;
 
   return (
     <main className="admin-page admin-products-page">
-      <div className="admin-page-heading"><div><p className="eyebrow">Inventory / catalog</p><h1>Products</h1></div><select className="admin-select" value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Product status"><option value="ALL">All products</option><option value="ACTIVE">Active only</option><option value="INACTIVE">Inactive only</option></select></div>
+      <div className="admin-page-heading">
+        <div>
+          <p className="eyebrow">Inventory management</p>
+          <h1>Products</h1>
+        </div>
+        <select
+          className="admin-select"
+          value={status}
+          onChange={(event) => setStatus(event.target.value)}
+          aria-label="Filter products by status"
+        >
+          <option value="ALL">All products</option>
+          <option value="ACTIVE">Active only</option>
+          <option value="INACTIVE">Inactive only</option>
+        </select>
+      </div>
+
+      <div className="admin-intro-line">
+        <span>{products.length} products listed in database</span>
+        <button className="admin-quiet-button" type="button" onClick={loadProducts}>
+          Refresh list
+        </button>
+      </div>
+
       {error && <div className="admin-notice" role="alert"><strong>{error}</strong></div>}
       {notice && <output className="admin-success">{notice}</output>}
-      <section className="admin-product-workspace">
+
+      <div className="admin-product-workspace">
         <form className="admin-form" onSubmit={submit}>
-          <div className="admin-form-heading"><p className="eyebrow">{formModeLabel}</p><h2>{formHeading}</h2></div>
-          <label>Name<input required value={form.name} onChange={(event) => updateField('name', event.target.value)} /></label>
-          <div className="admin-form-row"><label>Price<input required min="0" step="0.01" type="number" value={form.price} onChange={(event) => updateField('price', event.target.value)} /></label><label>Stock<input required min="0" step="1" type="number" value={form.stock_quantity} onChange={(event) => updateField('stock_quantity', event.target.value)} /></label></div>
-          <label>Category<select value={form.category_id || ''} onChange={(event) => updateField('category_id', event.target.value)}><option value="">Uncategorized</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
-          <label>Description<textarea rows="4" value={form.description || ''} onChange={(event) => updateField('description', event.target.value)} /></label>
-          <label>Image URLs <span className="admin-field-note">One URL per line</span><textarea rows="3" value={form.images} onChange={(event) => updateField('images', event.target.value)} /></label>
-          {editingId && <label className="admin-check"><input type="checkbox" checked={form.is_active} onChange={(event) => updateField('is_active', event.target.checked)} /> Product is active</label>}
-          <div className="admin-form-actions"><button className="button button-dark" type="submit" disabled={saving}>{submitLabel}</button>{editingId && <button className="admin-quiet-button" type="button" onClick={resetForm}>Cancel edit</button>}</div>
+          <div className="admin-form-heading">
+            <p className="eyebrow">{editingId ? 'Editing product' : 'New entry'}</p>
+            <h2>{editingId ? 'Edit details' : 'Add product'}</h2>
+          </div>
+
+          <label>
+            Name *
+            <input
+              required
+              value={form.name}
+              onChange={(event) => updateField('name', event.target.value)}
+              placeholder="e.g. MacBook Pro 16"
+            />
+          </label>
+
+          <label>
+            Description
+            <textarea
+              rows="3"
+              value={form.description}
+              onChange={(event) => updateField('description', event.target.value)}
+              placeholder="Chip, memory, storage specifications..."
+            />
+          </label>
+
+          <div className="admin-form-row">
+            <label>
+              Price ($) *
+              <input
+                required
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.price}
+                onChange={(event) => updateField('price', event.target.value)}
+                placeholder="999.00"
+              />
+            </label>
+
+            {/* Task 9: Allows setting stock to 0 */}
+            <label>
+              Stock count *
+              <input
+                required
+                type="number"
+                min="0"
+                value={form.stock_quantity}
+                onChange={(event) => updateField('stock_quantity', event.target.value)}
+                placeholder="0"
+              />
+              <span className="admin-field-note">Set 0 for out of stock</span>
+            </label>
+          </div>
+
+          <label>
+            Category
+            <select
+              value={form.category_id || ''}
+              onChange={(event) => updateField('category_id', event.target.value)}
+            >
+              <option value="">No category</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>{category.name}</option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Images (one URL per line)
+            <textarea
+              rows="3"
+              value={form.images}
+              onChange={(event) => updateField('images', event.target.value)}
+              placeholder="https://..."
+            />
+          </label>
+
+          {editingId && (
+            <label className="admin-check">
+              <input
+                type="checkbox"
+                checked={form.is_active}
+                onChange={(event) => updateField('is_active', event.target.checked)}
+              />
+              <span>Product is active and visible in store</span>
+            </label>
+          )}
+
+          <div className="admin-form-actions">
+            <button className="button button-signal" type="submit" disabled={saving}>
+              {submitLabel}
+            </button>
+            {editingId && (
+              <button
+                className="button button-quiet"
+                type="button"
+                onClick={handleCancelEditClick}
+              >
+                Cancel edit
+              </button>
+            )}
+          </div>
         </form>
-        <section className="admin-table-wrap" aria-label="Product inventory"><div className="admin-table-head"><span>{products.length} records</span><button className="admin-quiet-button" type="button" onClick={loadProducts}>Refresh</button></div>{inventoryContent}</section>
-      </section>
+
+        <section className="admin-table-wrap">
+          <div className="admin-table-head">
+            <span>Product</span>
+            <span>Category</span>
+            <span>Price</span>
+            <span>Stock</span>
+            <span>Status</span>
+            <span>Actions</span>
+          </div>
+
+          {loading ? (
+            <div className="admin-loading"><span className="loader-line" /> Loading products...</div>
+          ) : (
+            <div className="admin-table">
+              {products.map((product) => {
+                const stock = Number(product.stock_quantity);
+                const isZero = stock === 0;
+
+                return (
+                  <article className="admin-product-row" key={product.id}>
+                    <div className="admin-product-thumb">
+                      {product.images?.[0] ? <img src={product.images[0]} alt="" /> : <span>No img</span>}
+                    </div>
+
+                    <div className="admin-product-name">
+                      <strong>{product.name}</strong>
+                      <span>#{product.id.slice(0, 8)}</span>
+                    </div>
+
+                    <span className="admin-muted">{product.category?.name || 'Unassigned'}</span>
+                    <strong className="admin-table-number">${Number(product.price).toFixed(2)}</strong>
+
+                    <span className={`admin-table-number ${isZero ? 'danger-text' : ''}`}>
+                      {stock}
+                    </span>
+
+                    <span className={`admin-state-tag ${product.is_active ? 'is-active' : 'is-inactive'}`}>
+                      {product.is_active ? 'Active' : 'Inactive'}
+                    </span>
+
+                    <div className="admin-row-actions">
+                      <button type="button" onClick={() => editProduct(product)}>Edit</button>
+                      {product.is_active && (
+                        <button
+                          className="danger-text"
+                          type="button"
+                          onClick={() => setDeactivateProduct(product)}
+                        >
+                          Deactivate
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* Task 11: Confirmation modals */}
+      <ConfirmModal
+        isOpen={isCancelConfirmOpen}
+        title="Discard changes?"
+        message={<p>Any unsaved edits made to this product form will be discarded.</p>}
+        confirmLabel="Discard changes"
+        cancelLabel="Continue editing"
+        onConfirm={() => {
+          resetForm();
+          setIsCancelConfirmOpen(false);
+        }}
+        onCancel={() => setIsCancelConfirmOpen(false)}
+      />
+
+      <ConfirmModal
+        isOpen={Boolean(deactivateProduct)}
+        title="Deactivate product?"
+        message={
+          <div>
+            <p>Are you sure you want to deactivate <strong>"{deactivateProduct?.name}"</strong>?</p>
+            <p style={{ marginTop: '8px', color: 'var(--ink-soft)' }}>
+              It will no longer appear on the public storefront.
+            </p>
+          </div>
+        }
+        confirmLabel="Deactivate"
+        cancelLabel="Keep active"
+        isDestructive={true}
+        onConfirm={confirmDeactivate}
+        onCancel={() => setDeactivateProduct(null)}
+      />
     </main>
   );
 }
