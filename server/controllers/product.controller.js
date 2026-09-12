@@ -144,7 +144,7 @@ export const updateProduct = async (req, res) => {
                 name,
                 description,
                 price,
-                stock_quantity: stock_quantity || existingProduct.stock_quantity,
+                stock_quantity: stock_quantity !== undefined ? Number(stock_quantity) : existingProduct.stock_quantity,
                 category_id: category_id || existingProduct.category_id,
                 images: images !== undefined ? images : existingProduct.images,
                 is_active: is_active !== undefined ? is_active : existingProduct.is_active,

@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { cartApi } from '../api';
+import { cartApi, catalogApi } from '../api';
 import { useAuth } from './AuthContext';
 
 const CartContext = createContext(null);
@@ -22,19 +22,31 @@ function writeGuestCart(items) {
   localStorage.setItem(CART_STORAGE_KEY, JSON.stringify({ version: 1, items }));
 }
 
-function localCart(items) {
-  return {
-    ...emptyCart,
-    items: items.map((item) => ({
-      id: `local-${item.productId}`,
+function buildLocalCart(items, stockMap = {}) {
+  let totalAmount = 0;
+  const mapped = items.map((item) => {
+    const price = Number(item.price) || 0;
+    const itemTotal = price * item.quantity;
+    totalAmount += itemTotal;
+    const liveStock = stockMap[item.productId] ?? item.stock_quantity ?? 10;
+
+    return {
+      id: item.id || `local-${item.productId}`,
       productId: item.productId,
       quantity: item.quantity,
-      name: 'Product',
-      price: 0,
-      itemTotal: 0,
-      image: null,
-      is_active: true,
-    })),
+      name: item.name || 'Product',
+      price,
+      itemTotal,
+      image: item.image || null,
+      is_active: item.is_active ?? true,
+      stock_quantity: liveStock,
+    };
+  });
+
+  return {
+    ...emptyCart,
+    items: mapped,
+    totalAmount,
   };
 }
 
@@ -42,14 +54,48 @@ export function CartProvider({ children }) {
   const { isAuthenticated, isBooting } = useAuth();
   const [guestItems, setGuestItems] = useState(readGuestCart);
   const [serverCart, setServerCart] = useState(emptyCart);
+  const [stockMap, setStockMap] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const refreshStocks = async () => {
+    try {
+      const { data } = await catalogApi.products({ limit: 100 });
+      const map = {};
+      if (Array.isArray(data.data)) {
+        data.data.forEach((p) => {
+          map[p.id] = p.stock_quantity;
+        });
+      }
+      setStockMap(map);
+      return map;
+    } catch {
+      return {};
+    }
+  };
+
+  useEffect(() => {
+    catalogApi.products({ limit: 100 })
+      .then(({ data }) => {
+        const map = {};
+        if (Array.isArray(data.data)) {
+          data.data.forEach((p) => {
+            map[p.id] = p.stock_quantity;
+          });
+        }
+        setStockMap(map);
+      })
+      .catch(() => {});
+  }, []);
 
   const loadServerCart = async () => {
     setIsLoading(true);
     try {
-      const { data } = await cartApi.get();
-      setServerCart(data.data);
+      const [{ data: cartData }] = await Promise.all([
+        cartApi.get(),
+        refreshStocks(),
+      ]);
+      setServerCart(cartData.data);
       setError('');
     } catch (requestError) {
       setError(requestError.response?.data?.error || 'We could not load your cart.');
@@ -68,7 +114,11 @@ export function CartProvider({ children }) {
       setIsLoading(true);
       try {
         if (guestItems.length) {
-          const { data } = await cartApi.sync(guestItems);
+          const payload = guestItems.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+          }));
+          const { data } = await cartApi.sync(payload);
           setServerCart(data.data);
           setGuestItems([]);
           localStorage.removeItem(CART_STORAGE_KEY);
@@ -76,6 +126,7 @@ export function CartProvider({ children }) {
           const { data } = await cartApi.get();
           setServerCart(data.data);
         }
+        await refreshStocks();
         setError('');
       } catch (requestError) {
         setError(requestError.response?.data?.error || 'We could not sync your cart. Your guest cart is preserved.');
@@ -86,7 +137,6 @@ export function CartProvider({ children }) {
     };
 
     sync();
-  // Guest item changes stay local; this effect only owns the login transition.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, isBooting]);
 
@@ -100,11 +150,33 @@ export function CartProvider({ children }) {
     setError('');
     if (!isAuthenticated) {
       setGuestItems((current) => {
-        const existing = current.some((item) => item.productId === product.id);
-        const nextItems = existing
-          ? current.map((item) => item.productId === product.id ? { ...item, quantity: item.quantity + quantity } : item)
-          : [...current, { productId: product.id, quantity }];
-        return nextItems;
+        const existing = current.find((item) => item.productId === product.id);
+        if (existing) {
+          return current.map((item) =>
+            item.productId === product.id
+              ? {
+                  ...item,
+                  quantity: item.quantity + quantity,
+                  name: product.name || item.name,
+                  price: Number(product.price ?? item.price),
+                  image: product.images?.[0] || item.image,
+                  stock_quantity: product.stock_quantity ?? item.stock_quantity,
+                }
+              : item
+          );
+        }
+        return [
+          ...current,
+          {
+            productId: product.id,
+            quantity,
+            name: product.name,
+            price: Number(product.price),
+            image: product.images?.[0] || null,
+            stock_quantity: product.stock_quantity ?? 10,
+            is_active: product.is_active ?? true,
+          },
+        ];
       });
       return;
     }
@@ -112,23 +184,10 @@ export function CartProvider({ children }) {
     try {
       const { data } = await cartApi.add({ productId: product.id, quantity });
       setServerCart(data.data);
+      await refreshStocks();
     } catch (requestError) {
       setError(requestError.response?.data?.error || 'We could not add that item.');
-      throw requestError;
-    }
-  };
-
-  const updateItem = async (itemId, quantity) => {
-    setError('');
-    if (!isAuthenticated) {
-      setGuestItems((current) => current.map((item) => item.productId === itemId ? { ...item, quantity } : item));
-      return;
-    }
-    try {
-      const { data } = await cartApi.update(itemId, { quantity });
-      setServerCart(data.data);
-    } catch (requestError) {
-      setError(requestError.response?.data?.error || 'We could not update that quantity.');
+      await loadServerCart();
       throw requestError;
     }
   };
@@ -139,21 +198,66 @@ export function CartProvider({ children }) {
       setGuestItems((current) => current.filter((entry) => entry.productId !== item.productId));
       return;
     }
-    const { data } = await cartApi.remove(item.id);
-    setServerCart(data.data);
+    try {
+      const { data } = await cartApi.remove(item.id);
+      setServerCart(data.data);
+      await refreshStocks();
+    } catch (requestError) {
+      setError(requestError.response?.data?.error || 'Could not remove item.');
+      await loadServerCart();
+    }
+  };
+
+  const updateItem = async (itemId, quantity, itemObj) => {
+    setError('');
+    if (quantity <= 0) {
+      await removeItem(itemObj || { id: itemId, productId: itemId });
+      return;
+    }
+
+    if (!isAuthenticated) {
+      setGuestItems((current) =>
+        current.map((item) => (item.productId === itemId ? { ...item, quantity } : item))
+      );
+      return;
+    }
+
+    try {
+      const { data } = await cartApi.update(itemId, { quantity });
+      setServerCart(data.data);
+      await refreshStocks();
+    } catch (requestError) {
+      const errMsg = requestError.response?.data?.error || 'We could not update that quantity.';
+      setError(errMsg);
+      await loadServerCart();
+      throw requestError;
+    }
   };
 
   const clear = async () => {
     setError('');
     if (!isAuthenticated) {
       setGuestItems([]);
+      localStorage.removeItem(CART_STORAGE_KEY);
       return;
     }
     const { data } = await cartApi.clear();
     setServerCart(data.data);
   };
 
-  const cart = isAuthenticated ? serverCart : localCart(guestItems);
+  const cart = useMemo(() => {
+    if (!isAuthenticated) {
+      return buildLocalCart(guestItems, stockMap);
+    }
+    return {
+      ...serverCart,
+      items: serverCart.items.map((item) => ({
+        ...item,
+        stock_quantity: stockMap[item.productId] ?? 10,
+      })),
+    };
+  }, [isAuthenticated, guestItems, serverCart, stockMap]);
+
   const value = useMemo(() => ({
     cart,
     cartCount: cart.items.reduce((total, item) => total + item.quantity, 0),
@@ -164,7 +268,7 @@ export function CartProvider({ children }) {
     removeItem,
     clear,
     refresh: loadServerCart,
-  // Cart actions are recreated only when their state inputs change.
+    refreshStocks,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [cart, isLoading, error, isAuthenticated, guestItems]);
 
