@@ -32,9 +32,10 @@ export const createOrder = async (req, res) => {
                     total_amount: totalAmount,
                     status: 'PENDING',
                 }
-            })
+            });
 
             const orderItemsData = [];
+
             for (const item of cart.items) {
                 orderItemsData.push({
                     order_id: newOrder.id,
@@ -43,10 +44,24 @@ export const createOrder = async (req, res) => {
                     price_at_purchase: item.product.price
                 });
 
-                await tx.product.update({
-                    where: { id: item.product_id },
-                    data: { stock_quantity: { decrement: item.quantity } }
+                const updateResult = await tx.product.updateMany({
+                    where: {
+                        id: item.product_id,
+                        is_active: true,
+                        stock_quantity: { gte: item.quantity },
+                        price: item.product.price
+                    },
+                    data: {
+                        stock_quantity: { decrement: item.quantity }
+                    }
                 });
+
+                if (updateResult.count === 0) {
+                    throw {
+                        type: 'ATOMIC_INVENTORY_ERROR',
+                        message: `Sản phẩm ${item.product.name} vừa hết hàng hoặc ngừng bán hoặc đã thay đổi giá. Vui lòng thử lại!`
+                    };
+                }
             }
 
             await tx.orderItem.createMany({ data: orderItemsData });
@@ -55,10 +70,17 @@ export const createOrder = async (req, res) => {
 
             return newOrder;
         });
+
         return res.status(201).json({ message: 'Đơn hàng đã được tạo thành công!', order });
     }
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        // Xử lý lỗi thông minh: Không đánh đồng người dùng mua chậm với lỗi server sập
+        if (error.type === 'ATOMIC_INVENTORY_ERROR') {
+            return res.status(400).json({ message: error.message });
+        }
+
+        console.error("Lỗi tạo đơn hàng:", error);
+        return res.status(500).json({ message: 'Lỗi máy chủ nội bộ', error: error.message });
     }
 };
 
@@ -69,7 +91,7 @@ export const getMyOrders = async (req, res) => {
             orderBy: { created_at: 'desc' },
             include: { items: { include: { product: { select: { name: true, images: true } } } } }
         });
-        
+
         const formattedOrders = orders.map(order => ({
             ...order,
             total_amount: Number(order.total_amount),
@@ -78,7 +100,7 @@ export const getMyOrders = async (req, res) => {
                 price_at_purchase: Number(item.price_at_purchase)
             }))
         }));
-        
+
         return res.status(200).json({ data: formattedOrders });
     }
     catch (error) {
@@ -111,12 +133,12 @@ export const getAllOrders = async (req, res) => {
             }),
             prisma.order.count({ where: whereCondition })
         ]);
-        
+
         const formattedOrders = orders.map(order => ({
             ...order,
             total_amount: Number(order.total_amount)
         }));
-        
+
         return res.status(200).json({
             data: formattedOrders,
             meta: { total, page: pageNumber, limit: limitNumber, totalPages: Math.ceil(total / limitNumber) }
@@ -157,26 +179,75 @@ export const getOrderById = async (req, res) => {
     }
 };
 
+const VALID_TRANSITIONS = {
+    PENDING: ['PAID', 'CANCELLED'],
+    PAID: [],
+    CANCELLED: [],
+};
+
 export const updateOrderStatus = async (req, res) => {
     try {
         const { orderId } = req.params;
-        const { status } = req.body;
+        const { status: newStatus } = req.body;
 
         const validStatuses = ['PENDING', 'PAID', 'CANCELLED'];
-        if (!validStatuses.includes(status)) {
+        if (!validStatuses.includes(newStatus)) {
             return res.status(400).json({ message: 'Trạng thái đơn hàng không hợp lệ' });
         }
 
-        const existingOrder = await prisma.order.findUnique({ where: { id: orderId } });
+        const existingOrder = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
         if (!existingOrder) {
             return res.status(404).json({ message: 'Đơn hàng không tồn tại' });
         }
 
-        const order = await prisma.order.update({ where: { id: orderId }, data: { status } });
+        const allowed = VALID_TRANSITIONS[existingOrder.status] || [];
+        if (!allowed.includes(newStatus)) {
+            return res.status(400).json({
+                message: `Không thể chuyển từ ${existingOrder.status} sang ${newStatus}`,
+            });
+        }
 
-        return res.status(200).json({ message: 'Cập nhật trạng thái đơn hàng thành công', data: order });
+        if (newStatus === 'CANCELLED') {
+            await prisma.$transaction(async (tx) => {
+                const updateResult = await tx.order.updateMany({
+                    where: {
+                        id: orderId,
+                        status: existingOrder.status
+                    },
+                    data: { status: 'CANCELLED' }
+                });
+
+                if (updateResult.count === 0) {
+                    throw {
+                        type: 'STATE_CONFLICT',
+                        message: 'Xung đột dữ liệu: Đơn hàng đã được xử lý bởi một yêu cầu khác. Vui lòng tải lại trang.'
+                    };
+                }
+
+                for (const item of existingOrder.items) {
+                    await tx.product.update({
+                        where: { id: item.product_id },
+                        data: { stock_quantity: { increment: item.quantity } },
+                    });
+                }
+            });
+        } 
+        else {
+            const updateResult = await prisma.order.updateMany({
+                where: { id: orderId, status: existingOrder.status },
+                data: { status: newStatus }
+            });
+
+            if (updateResult.count === 0) {
+                return res.status(409).json({ message: 'Xung đột trạng thái. Vui lòng tải lại trang.' });
+            }
+        }
+        return res.status(200).json({ message: 'Cập nhật trạng thái đơn hàng thành công' });
     }
     catch (error) {
+        if (error.type === 'STATE_CONFLICT') {
+            return res.status(409).json({ message: error.message });
+        }
         return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
     }
 };

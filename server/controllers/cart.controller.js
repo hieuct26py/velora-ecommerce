@@ -61,7 +61,8 @@ export const addItemToCart = async (req, res) => {
         }
 
         const product = await prisma.product.findUnique({
-            where: { id: productId }
+            where: { id: productId },
+            select: { is_active: true, stock_quantity: true }
         });
         if (!product?.is_active) {
             return res.status(404).json({ error: "Sản phẩm không tồn tại hoặc không khả dụng" });
@@ -78,24 +79,22 @@ export const addItemToCart = async (req, res) => {
                 create: { user_id: userId },
             });
 
-            const existingItem = await tx.cartItem.findUnique({
-                where: { cart_id_product_id: { cart_id: currentCart.id, product_id: productId } },
-            });
-
-            if (existingItem && existingItem.quantity + quantity > product.stock_quantity) {
-                const error = new Error("Tổng số lượng sản phẩm trong giỏ vượt quá tồn kho");
-                error.code = "CART_STOCK_EXCEEDED";
-                throw error;
-            }
-
             await tx.cartItem.upsert({
-                where: { cart_id_product_id: { cart_id: currentCart.id, product_id: productId } },
-                update: { quantity: { increment: quantity } },
-                create: { cart_id: currentCart.id, product_id: productId, quantity }
+                where: { 
+                    cart_id_product_id: { cart_id: currentCart.id, product_id: productId } 
+                },
+                update: { 
+                    quantity: { increment: quantity } 
+                },
+                create: { 
+                    cart_id: currentCart.id, 
+                    product_id: productId, 
+                    quantity 
+                }
             });
 
             return currentCart;
-        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+        });
 
         const updatedCart = await prisma.cart.findUnique({
             where: { id: cart.id },
@@ -106,9 +105,6 @@ export const addItemToCart = async (req, res) => {
     }
     catch (error) {
         console.error(error);
-        if (error.code === "CART_STOCK_EXCEEDED") {
-            return res.status(400).json({ error: error.message });
-        }
         return res.status(500).json({ error: "Có lỗi xảy ra khi thêm sản phẩm vào giỏ hàng." });
     }
 };
