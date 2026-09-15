@@ -5,6 +5,11 @@ import crypto from 'node:crypto';
 import { generateTokens } from '../utils/token.js';
 
 const prisma = new PrismaClient();
+const DUMMY_HASH = bcrypt.hashSync('dummy_password_mmb', 10);
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 8;
+const MAX_PASSWORD_LENGTH = 72;
 
 export const register = async (req, res) => {
     try {
@@ -19,6 +24,14 @@ export const register = async (req, res) => {
 
         if (existingUser) {
             return res.status(400).json({ message: 'Email đã được sử dụng!' });
+        }
+
+        if (!EMAIL_REGEX.test(normalizedEmail)) {
+            return res.status(400).json({ message: 'Email không hợp lệ!' });
+        }
+
+        if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
+            return res.status(400).json({ message: `Mật khẩu phải có độ dài từ ${MIN_PASSWORD_LENGTH} đến ${MAX_PASSWORD_LENGTH} ký tự!` });
         }
 
         const passwordHash = await bcrypt.hash(password, 10);
@@ -46,12 +59,14 @@ export const login = async (req, res) => {
 
         const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
         if (!user) {
-            return res.status(401).json({ message: 'Email không tồn tại!' });
+            // return res.status(401).json({ message: 'Email không tồn tại!' });
+            await bcrypt.compare(password, DUMMY_HASH);
+            return res.status(401).json({ message: 'Email hoặc mật khẩu không đúng!' });
         }
 
         const isPasswordValid = await bcrypt.compare(password, user.password_hash);
         if (!isPasswordValid) {
-            return res.status(401).json({ message: 'Sai mật khẩu!' });
+            return res.status(401).json({ message: 'Email hoặc mật khẩu không đúng!' });
         }
 
         if (!user.is_active) {
@@ -100,6 +115,10 @@ export const changePassword = async (req, res) => {
         const isPasswordValid = await bcrypt.compare(currentPassword, user.password_hash);
         if (!isPasswordValid) {
             return res.status(401).json({ message: 'Mật khẩu hiện tại không đúng!' });
+        }
+
+        if (newPassword.length < MIN_PASSWORD_LENGTH || newPassword.length > MAX_PASSWORD_LENGTH) {
+            return res.status(400).json({ message: `Mật khẩu mới phải có độ dài từ ${MIN_PASSWORD_LENGTH} đến ${MAX_PASSWORD_LENGTH} ký tự!` });
         }
 
         const passwordHash = await bcrypt.hash(newPassword, 10);
