@@ -102,6 +102,8 @@ model Order {
   user              User        @relation(fields: [user_id], references: [id], onUpdate: NoAction)
 
   @@index([user_id], map: "idx_orders_user_id")
+  @@index([status, created_at(sort: Desc)], map: "idx_orders_status_created_desc")
+  @@index([created_at(sort: Desc)], map: "idx_orders_created_desc")
   @@map("orders")
 }
 

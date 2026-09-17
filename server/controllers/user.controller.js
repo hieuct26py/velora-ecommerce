@@ -1,5 +1,7 @@
 import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import prisma from '../utils/prisma.js';
+
+// const prisma = new PrismaClient();
 
 const profileSelect = {
     id: true,

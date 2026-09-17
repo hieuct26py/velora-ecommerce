@@ -3,8 +3,9 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'node:crypto';
 import { generateTokens } from '../utils/token.js';
+import prisma from '../utils/prisma.js';
 
-const prisma = new PrismaClient();
+// const prisma = new PrismaClient();
 const DUMMY_HASH = bcrypt.hashSync('dummy_password_mmb', 10);
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

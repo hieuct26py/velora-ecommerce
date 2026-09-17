@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
+import prisma from '../utils/prisma.js';
 
-const prisma = new PrismaClient();
+// const prisma = new PrismaClient();
 
 export const createOrder = async (req, res) => {
     try {
@@ -34,17 +35,17 @@ export const createOrder = async (req, res) => {
                 }
             });
 
-            const orderItemsData = [];
+            // const orderItemsData = [];
+            const sortedItems = [...cart.items].sort((a, b) => a.product_id.localeCompare(b.product_id));
+            const orderItemsData = sortedItems.map(item => ({
+                order_id: newOrder.id,
+                product_id: item.product_id,
+                quantity: item.quantity,
+                price_at_purchase: item.product.price
+            }));
 
-            for (const item of cart.items) {
-                orderItemsData.push({
-                    order_id: newOrder.id,
-                    product_id: item.product_id,
-                    quantity: item.quantity,
-                    price_at_purchase: item.product.price
-                });
-
-                const updateResult = await tx.product.updateMany({
+            const updatePromises = sortedItems.map(item =>
+                tx.product.updateMany({
                     where: {
                         id: item.product_id,
                         is_active: true,
@@ -54,18 +55,22 @@ export const createOrder = async (req, res) => {
                     data: {
                         stock_quantity: { decrement: item.quantity }
                     }
-                });
+                })
+            );
 
-                if (updateResult.count === 0) {
-                    throw {
-                        type: 'ATOMIC_INVENTORY_ERROR',
-                        message: `Sản phẩm ${item.product.name} vừa hết hàng hoặc ngừng bán hoặc đã thay đổi giá. Vui lòng thử lại!`
-                    };
-                }
+            const updateResults = await Promise.all(updatePromises);
+
+            const failedIndex = updateResults.findIndex(result => result.count === 0);
+
+            if (failedIndex !== -1) {
+                const failedItem = sortedItems[failedIndex].product.name;
+                throw {
+                    type: 'ATOMIC_INVENTORY_ERROR',
+                    message: `Sản phẩm ${failedItem} không đủ số lượng hoặc đã bị thay đổi giá. Vui lòng kiểm tra lại giỏ hàng.`
+                };
             }
 
             await tx.orderItem.createMany({ data: orderItemsData });
-
             await tx.cartItem.deleteMany({ where: { cart_id: cart.id } });
 
             return newOrder;
@@ -74,7 +79,6 @@ export const createOrder = async (req, res) => {
         return res.status(201).json({ message: 'Đơn hàng đã được tạo thành công!', order });
     }
     catch (error) {
-        // Xử lý lỗi thông minh: Không đánh đồng người dùng mua chậm với lỗi server sập
         if (error.type === 'ATOMIC_INVENTORY_ERROR') {
             return res.status(400).json({ message: error.message });
         }
@@ -276,12 +280,16 @@ export const deleteOrder = async (req, res) => {
                 data: { status: 'CANCELLED' }
             });
 
-            for (const item of order.items) {
-                await tx.product.update({
+            const sortedItems = [...order.items].sort((a, b) => a.product_id.localeCompare(b.product_id));
+
+            const updatePromises = sortedItems.map(item =>
+                tx.product.update({
                     where: { id: item.product_id },
                     data: { stock_quantity: { increment: item.quantity } }
-                });
-            }
+                })
+            );
+            
+            await Promise.all(updatePromises);
         });
 
         return res.status(200).json({ message: 'Xóa đơn hàng thành công' });
