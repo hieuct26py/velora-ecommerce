@@ -1,6 +1,7 @@
 import { Prisma, PrismaClient } from "@prisma/client";
+import prisma from '../utils/prisma.js';
 
-const prisma = new PrismaClient();
+// const prisma = new PrismaClient();
 
 const formatCartItems = async (cart) => {
     let totalAmount = 0;
