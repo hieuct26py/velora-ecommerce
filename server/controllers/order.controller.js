@@ -3,7 +3,7 @@ import prisma from '../utils/prisma.js';
 
 // const prisma = new PrismaClient();
 
-export const createOrder = async (req, res) => {
+export const createOrder = async (req, res, next) => {
     try {
         const userId = req.user.sub;
         const cart = await prisma.cart.findUnique({
@@ -83,12 +83,11 @@ export const createOrder = async (req, res) => {
             return res.status(400).json({ message: error.message });
         }
 
-        console.error("Lỗi tạo đơn hàng:", error);
-        return res.status(500).json({ message: 'Lỗi máy chủ nội bộ', error: error.message });
+        next(error);
     }
 };
 
-export const getMyOrders = async (req, res) => {
+export const getMyOrders = async (req, res, next) => {
     try {
         const orders = await prisma.order.findMany({
             where: { user_id: req.user.sub },
@@ -108,11 +107,11 @@ export const getMyOrders = async (req, res) => {
         return res.status(200).json({ data: formattedOrders });
     }
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
-export const getAllOrders = async (req, res) => {
+export const getAllOrders = async (req, res, next) => {
     try {
         const { status, page = 1, limit = 10 } = req.query;
         const pageNumber = Number(page);
@@ -149,11 +148,11 @@ export const getAllOrders = async (req, res) => {
         });
     }
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
-export const getOrderById = async (req, res) => {
+export const getOrderById = async (req, res, next) => {
     try {
         const { orderId } = req.params;
 
@@ -179,7 +178,7 @@ export const getOrderById = async (req, res) => {
         return res.status(200).json({ data: order });
     }
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
@@ -189,7 +188,7 @@ const VALID_TRANSITIONS = {
     CANCELLED: [],
 };
 
-export const updateOrderStatus = async (req, res) => {
+export const updateOrderStatus = async (req, res, next) => {
     try {
         const { orderId } = req.params;
         const { status: newStatus } = req.body;
@@ -252,11 +251,11 @@ export const updateOrderStatus = async (req, res) => {
         if (error.type === 'STATE_CONFLICT') {
             return res.status(409).json({ message: error.message });
         }
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
-export const deleteOrder = async (req, res) => {
+export const deleteOrder = async (req, res, next) => {
     try {
         const { orderId } = req.params;
 
@@ -295,6 +294,6 @@ export const deleteOrder = async (req, res) => {
         return res.status(200).json({ message: 'Xóa đơn hàng thành công' });
     }
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 }
