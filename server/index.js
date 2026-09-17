@@ -11,6 +11,8 @@ import cartRoutes from './routes/cart.routes.js';
 import orderRoutes from './routes/order.routes.js';
 import analyticsRoutes from './routes/analytics.routes.js';
 import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import { errorHandler } from './middlewares/errorHandler.js';
 
 dotenv.config();
 
@@ -64,6 +66,8 @@ app.use('/api/v1/products', productRoutes);
 app.use('/api/v1/cart', cartRoutes);
 app.use('/api/v1/orders', orderRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
+
+app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
