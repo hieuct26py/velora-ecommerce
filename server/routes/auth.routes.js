@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { register, login, changePassword, refreshToken, logout } from '../controllers/auth.controller.js';
-import { verifyToken } from '../middlewares/auth.middleware.js';
+import { verifyToken, verifyActiveUser } from '../middlewares/auth.middleware.js';
 import rateLimit from 'express-rate-limit';
 
 const router = Router();
@@ -21,7 +21,7 @@ const refreshLimiter = rateLimit({
 
 router.post('/register', authLimiter, register);
 router.post('/login', authLimiter, login);
-router.patch('/change-password', verifyToken, changePassword);
+router.patch('/change-password', verifyToken, verifyActiveUser, changePassword);
 router.post('/refresh-token', refreshLimiter, refreshToken);
 router.post('/logout', verifyToken, logout);
 
