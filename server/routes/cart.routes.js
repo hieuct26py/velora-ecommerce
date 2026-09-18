@@ -1,10 +1,10 @@
 import { Router } from "express";
 import { getCart, addItemToCart, updateCartItem, removeCartItem, clearCart, syncCart } from "../controllers/cart.controller.js";
-import { verifyToken } from "../middlewares/auth.middleware.js";
+import { verifyToken, verifyActiveUser } from "../middlewares/auth.middleware.js";
 
 const router = Router();
 
-router.use(verifyToken);
+router.use(verifyToken, verifyActiveUser);
 
 router.get('/', getCart);
 router.post('/items', addItemToCart);

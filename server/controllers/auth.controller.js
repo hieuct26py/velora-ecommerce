@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'node:crypto';
-import { generateTokens } from '../utils/token.js';
+import { generateTokens, generateAccessToken } from '../utils/token.js';
 import prisma from '../utils/prisma.js';
 
 // const prisma = new PrismaClient();
@@ -12,7 +12,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 72;
 
-export const register = async (req, res) => {
+export const register = async (req, res, next) => {
     try {
         const { email, password } = req.body;
 
@@ -49,11 +49,11 @@ export const register = async (req, res) => {
 
         return res.status(201).json({ message: 'Đăng ký thành công!', user });
     } catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
-export const login = async (req, res) => {
+export const login = async (req, res, next) => {
     try {
         const { email, password } = req.body;
         const normalizedEmail = String(email || '').trim().toLowerCase();
@@ -76,6 +76,16 @@ export const login = async (req, res) => {
 
         const { accessToken, refreshToken } = generateTokens(user);
 
+        // Băm SHA-256 và lưu Refresh Token vào Database
+        const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+        await prisma.refreshToken.create({
+            data: {
+                user_id: user.id,
+                token_hash: tokenHash,
+                expires_at: new Date(Date.now() + 7 * 86400000),
+            },
+        });
+
         res.cookie('refreshToken', refreshToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
@@ -91,11 +101,11 @@ export const login = async (req, res) => {
             role: user.role,
         });
     } catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
-export const changePassword = async (req, res) => {
+export const changePassword = async (req, res, next) => {
     try {
         const { currentPassword, newPassword } = req.body;
 
@@ -130,53 +140,85 @@ export const changePassword = async (req, res) => {
 
         return res.status(200).json({ message: 'Đổi mật khẩu thành công!' });
     } catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
-export const refreshToken = async (req, res) => {
-    const refreshTokenValue = req.cookies?.refreshToken;
+export const refreshToken = async (req, res, next) => {
+    try {
+        const refreshTokenValue = req.cookies?.refreshToken;
 
-    if (!refreshTokenValue) {
-        return res.status(401).json({ message: 'Không tìm thấy phiên đăng nhập trong Cookie!' });
-    }
-
-    jwt.verify(refreshTokenValue, process.env.REFRESH_TOKEN_SECRET, async (err, decodedPayload) => {
-        if (err) {
-            return res.status(403).json({ message: 'Phiên đăng nhập đã hết hạn hoặc không hợp lệ!' });
+        if (!refreshTokenValue) {
+            return res.status(401).json({ message: 'Không tìm thấy phiên đăng nhập trong Cookie!' });
         }
 
+        const cookieOptions = {
+            httpOnly: true,
+            sameSite: 'strict',
+            secure: process.env.NODE_ENV === 'production',
+        };
+
+        // 1. Kiểm tra chữ ký và hạn của JWT trước
         try {
-            const user = await prisma.user.findUnique({ where: { id: decodedPayload.sub } });
-
-            if (!user) {
-                return res.status(404).json({ message: 'Người dùng không tồn tại!' });
+            jwt.verify(refreshTokenValue, process.env.REFRESH_TOKEN_SECRET);
+        } catch (err) {
+            if (err.name === 'TokenExpiredError' || err.name === 'JsonWebTokenError') {
+                res.clearCookie('refreshToken', cookieOptions);
+                return res.status(401).json({ message: 'Phiên đăng nhập đã hết hạn hoặc không hợp lệ!' });
             }
-
-            if (!user.is_active) {
-                return res.status(403).json({ message: 'Tài khoản của bạn đã bị vô hiệu hóa!' });
-            }
-
-            const newAccessToken = jwt.sign(
-                { sub: user.id, role: user.role },
-                process.env.ACCESS_TOKEN_SECRET,
-                { expiresIn: '15m' }
-            );
-
-            return res.status(200).json({ accessToken: newAccessToken });
+            throw err;
         }
-        catch (error) {
-            return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+
+        // 2. Băm SHA-256 và tìm trong DB
+        const tokenHash = crypto.createHash('sha256').update(refreshTokenValue).digest('hex');
+        const storedToken = await prisma.refreshToken.findFirst({
+            where: { token_hash: tokenHash },
+            include: { user: true },
+        });
+
+        // 3. Kiểm tra các điều kiện thu hồi / không hợp lệ
+        if (!storedToken || storedToken.revoked) {
+            res.clearCookie('refreshToken', cookieOptions);
+            return res.status(403).json({ message: 'Phiên đăng nhập không hợp lệ hoặc đã bị thu hồi!' });
         }
-    });
+
+        if (!storedToken.user || !storedToken.user.is_active) {
+            await prisma.refreshToken.update({
+                where: { id: storedToken.id },
+                data: { revoked: true },
+            });
+            res.clearCookie('refreshToken', cookieOptions);
+            return res.status(403).json({ message: 'Tài khoản của bạn đã bị vô hiệu hóa!' });
+        }
+
+        // 4. Cấp Access Token mới
+        const newAccessToken = generateAccessToken(storedToken.user);
+
+        return res.status(200).json({ accessToken: newAccessToken });
+    } catch (error) {
+        next(error);
+    }
 };
 
-export const logout = async (req, res) => {
-    res.clearCookie('refreshToken', {
-        httpOnly: true,
-        sameSite: 'strict',
-        secure: process.env.NODE_ENV === 'production',
-    });
+export const logout = async (req, res, next) => {
+    try {
+        const refreshTokenValue = req.cookies?.refreshToken;
+        if (refreshTokenValue) {
+            const tokenHash = crypto.createHash('sha256').update(refreshTokenValue).digest('hex');
+            await prisma.refreshToken.updateMany({
+                where: { token_hash: tokenHash, revoked: false },
+                data: { revoked: true },
+            });
+        }
 
-    return res.status(200).json({ message: 'Đăng xuất thành công!' });
+        res.clearCookie('refreshToken', {
+            httpOnly: true,
+            sameSite: 'strict',
+            secure: process.env.NODE_ENV === 'production',
+        });
+
+        return res.status(200).json({ message: 'Đăng xuất thành công!' });
+    } catch (error) {
+        next(error);
+    }
 };

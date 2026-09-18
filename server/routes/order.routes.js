@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { createOrder, getMyOrders, getAllOrders, getOrderById, updateOrderStatus, deleteOrder } from '../controllers/order.controller.js';
-import { verifyToken, verifyAdmin } from '../middlewares/auth.middleware.js';
+import { verifyToken, verifyActiveUser, verifyAdmin } from '../middlewares/auth.middleware.js';
 
 const router = Router();
-router.use(verifyToken);
+router.use(verifyToken, verifyActiveUser);
 
 router.post('/', createOrder);
 router.get('/', verifyAdmin, getAllOrders);

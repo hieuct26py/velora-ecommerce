@@ -10,3 +10,12 @@ export const generateTokens = (user) => {
     const refreshToken = jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
     return { accessToken, refreshToken };
 };
+
+export const generateAccessToken = (user) => {
+    const payload = {
+        sub: user.id,
+        role: String(user.role || 'CUSTOMER').toUpperCase(),
+    };
+
+    return jwt.sign(payload, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '15m' });
+};

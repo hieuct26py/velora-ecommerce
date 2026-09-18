@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { getAllUsers, getMe, getUserById, updateMe, updateUser, toggleUserStatus } from '../controllers/user.controller.js';
 import { checkOwner } from '../middlewares/checkOwner.js';
-import { verifyToken, verifyAdmin } from '../middlewares/auth.middleware.js';
+import { verifyToken, verifyActiveUser, verifyAdmin } from '../middlewares/auth.middleware.js';
 
 const router = Router();
-router.use(verifyToken);
+router.use(verifyToken, verifyActiveUser);
 
 router.get('/', verifyAdmin, getAllUsers);
 router.get('/me', getMe);
