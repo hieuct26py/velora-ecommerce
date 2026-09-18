@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from '../router';
+import { Link, useNavigate } from '../router';
 import { orderApi } from '../api';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,25 +7,60 @@ import QuantityControl from '../components/QuantityControl';
 import ConfirmModal from '../components/ConfirmModal';
 
 export default function Checkout() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { cart, refresh } = useCart();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [priceMismatchModalOpen, setPriceMismatchModalOpen] = useState(false);
+  const [priceMismatchMessage, setPriceMismatchMessage] = useState('');
   const [error, setError] = useState('');
   const [order, setOrder] = useState(null);
 
   const handlePlaceOrder = async () => {
     setIsSubmitting(true);
     setError('');
+    setPriceMismatchMessage('');
+
+    // 1. Tính toán tổng tiền người dùng đang nhìn thấy trên màn hình
+    const calculatedTotal = cart.items.reduce(
+      (total, item) => total + (Number(item.price) * item.quantity),
+      0
+    );
+
+    // 2. Thêm expectedTotalAmount vào payload gửi lên Backend
+    const payload = {
+      cart_id: cart.id,
+      expectedTotalAmount: calculatedTotal,
+    };
+
     try {
-      const { data } = await orderApi.create();
+      const { data } = await orderApi.create(payload);
       setOrder(data.order);
       setIsModalOpen(false);
       await refresh();
     } catch (requestError) {
       setIsModalOpen(false);
-      setError(requestError.response?.data?.message || 'We could not place this order. Your cart is still here.');
-      await refresh();
+      const resData = requestError.response?.data;
+      const status = requestError.response?.status;
+      const errMsg = resData?.message || resData?.error || '';
+
+      // 3. Xử lý lỗi giá thay đổi (Price Mismatch)
+      const isPriceMismatch = status === 400 && (
+        /giá|price|mismatch/i.test(errMsg)
+      );
+
+      if (isPriceMismatch) {
+        setPriceMismatchMessage(
+          "Giá của một số sản phẩm trong giỏ hàng đã thay đổi. Vui lòng kiểm tra lại trước khi thanh toán."
+        );
+        setPriceMismatchModalOpen(true);
+        // Tự động gọi lại API fetch Giỏ hàng để cập nhật giá mới nhất
+        await refresh();
+      } else {
+        setError(errMsg || 'We could not place this order. Your cart is still here.');
+        await refresh();
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -160,6 +195,26 @@ export default function Checkout() {
         isLoading={isSubmitting}
         onConfirm={handlePlaceOrder}
         onCancel={() => setIsModalOpen(false)}
+      />
+
+      <ConfirmModal
+        isOpen={priceMismatchModalOpen}
+        title="Notice: Price Update"
+        message={
+          <div>
+            <p>{priceMismatchMessage}</p>
+            <p style={{ marginTop: '8px', color: 'var(--ink-soft)' }}>
+              Prices have been refreshed from the catalog. Please review your cart before placing the order.
+            </p>
+          </div>
+        }
+        confirmLabel="Review updated cart"
+        cancelLabel="Stay on checkout"
+        onConfirm={() => {
+          setPriceMismatchModalOpen(false);
+          navigate('/cart');
+        }}
+        onCancel={() => setPriceMismatchModalOpen(false)}
       />
     </main>
   );

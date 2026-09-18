@@ -6,6 +6,7 @@ import prisma from '../utils/prisma.js';
 export const createOrder = async (req, res, next) => {
     try {
         const userId = req.user.sub;
+        const { expectedTotalAmount } = req.body || {};
         const cart = await prisma.cart.findUnique({
             where: { user_id: userId },
             include: { items: { include: { product: true } } },
@@ -24,6 +25,12 @@ export const createOrder = async (req, res, next) => {
                 return res.status(400).json({ message: `Sản phẩm ${item.product.name} không đủ số lượng!` });
             }
             totalAmount += Number(item.product.price) * item.quantity;
+        }
+
+        if (expectedTotalAmount !== undefined && Math.abs(Number(expectedTotalAmount) - totalAmount) > 0.01) {
+            return res.status(400).json({
+                message: 'Giá sản phẩm đã thay đổi. Vui lòng kiểm tra lại giỏ hàng.'
+            });
         }
 
         const order = await prisma.$transaction(async (tx) => {
