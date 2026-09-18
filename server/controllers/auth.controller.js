@@ -205,9 +205,13 @@ export const logout = async (req, res, next) => {
         const refreshTokenValue = req.cookies?.refreshToken;
         if (refreshTokenValue) {
             const tokenHash = crypto.createHash('sha256').update(refreshTokenValue).digest('hex');
-            await prisma.refreshToken.updateMany({
-                where: { token_hash: tokenHash, revoked: false },
-                data: { revoked: true },
+            // await prisma.refreshToken.updateMany({
+            //     where: { token_hash: tokenHash, revoked: false },
+            //     data: { revoked: true },
+            // });
+
+            await prisma.refreshToken.deleteMany({
+                where: { token_hash: tokenHash },
             });
         }
 
