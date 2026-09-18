@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from '../router';
 import QuantityControl from '../components/QuantityControl';
 import StatusLabel from '../components/StatusLabel';
@@ -9,8 +9,11 @@ import { orderApi } from '../api';
 export default function Cart() {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
-  const { cart, error, isLoading, updateItem, removeItem, clear } = useCart();
+  const { cart, error, isLoading, updateItem, removeItem, clear, refreshStocks } = useCart();
   const [recentPaidOrders, setRecentPaidOrders] = useState([]);
+  const [stockNotice, setStockNotice] = useState(null);
+  const [localQuantities, setLocalQuantities] = useState({});
+  const debounceTimers = useRef({});
   const isGuest = !cart.userId;
 
   useEffect(() => {
@@ -24,17 +27,87 @@ export default function Cart() {
       .catch(() => setRecentPaidOrders([]));
   }, [isAuthenticated]);
 
-  const changeQuantity = async (item, quantity) => {
+  // Clean up debounce timers on unmount
+  useEffect(() => {
+    const timers = debounceTimers.current;
+    return () => {
+      Object.values(timers).forEach(clearTimeout);
+    };
+  }, []);
+
+  const changeQuantity = (item, quantity) => {
     const targetId = isGuest ? item.productId : item.id;
-    try {
-      if (quantity <= 0) {
-        await removeItem(item);
-      } else {
-        await updateItem(targetId, quantity, item);
-      }
-    } catch {
-      // Handled in context with error display
+    const previousQuantity = item.quantity;
+
+    if (quantity <= 0) {
+      removeItem(item);
+      setLocalQuantities((prev) => {
+        const next = { ...prev };
+        delete next[targetId];
+        return next;
+      });
+      return;
     }
+
+    // 1. Cập nhật UI ngay lập tức không bị kẹt nút
+    setLocalQuantities((prev) => ({ ...prev, [targetId]: quantity }));
+    setStockNotice(null);
+
+    // 2. Debounce gọi API update để tránh spam
+    if (debounceTimers.current[targetId]) {
+      clearTimeout(debounceTimers.current[targetId]);
+    }
+
+    debounceTimers.current[targetId] = setTimeout(async () => {
+      try {
+        await updateItem(targetId, quantity, item);
+      } catch (err) {
+        const errRes = err.response?.data;
+        const errMsg = errRes?.message || errRes?.error || '';
+        const isStockError = err.response?.status === 400 && (
+          /tồn kho|stock|số lượng|exceeded|không đủ/i.test(errMsg)
+        );
+
+        if (isStockError) {
+          // Lấy thông tin tồn kho thực tế từ backend
+          let liveStock = item.stock_quantity;
+          try {
+            const map = await refreshStocks();
+            if (map && map[item.productId] !== undefined) {
+              liveStock = map[item.productId];
+            }
+          } catch {
+            // fallback to item.stock_quantity
+          }
+
+          const maxAvailable = liveStock ?? 0;
+          let friendlyMsg = `Sản phẩm "${item.name}" hiện tại chỉ còn ${maxAvailable} cái trong kho.`;
+          if (maxAvailable <= 0) {
+            friendlyMsg = `Sản phẩm "${item.name}" hiện đã hết hàng.`;
+          }
+
+          setStockNotice(friendlyMsg);
+
+          // Tự động cập nhật lại ô số lượng về số lượng tối đa thực tế (nếu > 0) hoặc reset về số cũ
+          const fallbackQty = maxAvailable > 0 ? maxAvailable : previousQuantity;
+          setLocalQuantities((prev) => ({ ...prev, [targetId]: fallbackQty }));
+
+          if (fallbackQty > 0 && fallbackQty !== quantity) {
+            try {
+              await updateItem(targetId, fallbackQty, item);
+            } catch {
+              // ignore
+            }
+          }
+        } else {
+          // Lỗi khác: reset về số cũ
+          setLocalQuantities((prev) => ({ ...prev, [targetId]: previousQuantity }));
+          setStockNotice(errMsg || 'Không thể cập nhật số lượng.');
+        }
+      } finally {
+        delete debounceTimers.current[targetId];
+      }
+    }, 400);
   };
 
   return (
@@ -47,7 +120,13 @@ export default function Cart() {
         <span>{cart.items.length} {cart.items.length === 1 ? 'line' : 'lines'}</span>
       </div>
 
-      {error && (
+      {stockNotice && (
+        <div className="notice notice-error" role="alert">
+          <strong>{stockNotice}</strong>
+        </div>
+      )}
+
+      {error && !stockNotice && (
         <div className="notice notice-error" role="alert">
           <strong>{error}</strong>
           <span>If an item is out of stock, please remove it to proceed with your order.</span>
@@ -68,6 +147,8 @@ export default function Cart() {
         <div className="cart-layout">
           <section className="cart-lines" aria-label="Cart items">
             {cart.items.map((item) => {
+              const targetId = isGuest ? item.productId : item.id;
+              const currentQuantity = localQuantities[targetId] ?? item.quantity;
               const stock = item.stock_quantity ?? 10;
               const isOutOfStock = stock < 1;
               const isLowStock = stock > 0 && stock <= 3;
@@ -107,9 +188,7 @@ export default function Cart() {
 
                     <div className="cart-line-controls">
                       <QuantityControl
-                        quantity={item.quantity}
-                        max={Math.max(1, stock)}
-                        disabled={isOutOfStock}
+                        quantity={currentQuantity}
                         onChange={(quantity) => changeQuantity(item, quantity)}
                       />
                       <button
