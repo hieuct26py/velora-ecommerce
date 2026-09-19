@@ -3,6 +3,8 @@ import { catalogApi } from '../api';
 import { useCart } from '../contexts/CartContext';
 import { Link, useRoute } from '../router';
 import QuantityControl from '../components/QuantityControl';
+import Breadcrumb from '../components/Breadcrumb';
+import { getProductTypeClass } from '../components/ProductCard';
 
 const fallbackImage = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=1200&q=85';
 
@@ -59,13 +61,25 @@ export default function ProductDetail() {
     }
   };
 
+  const breadcrumbItems = [
+    { label: 'Trang chủ', to: '/' },
+    {
+      label: product.category?.name || 'iPhone',
+      to: product.category?.id ? `/?category=${encodeURIComponent(product.category.id)}` : '/',
+    },
+    { label: product.name },
+  ];
+
   return (
     <main className="page-width page-section product-detail">
-      <Link className="back-link" to="/">← Back to collection</Link>
+      <div className="product-detail-topbar flex items-center justify-between flex-wrap gap-2 mb-6">
+        <Breadcrumb items={breadcrumbItems} />
+        <Link className="back-link" to="/">← Quay lại danh mục</Link>
+      </div>
 
       <div className="product-detail-grid">
         <section className="detail-gallery">
-          <div className="detail-main-image">
+          <div className={`detail-main-image ${getProductTypeClass(product)}`}>
             <img
               src={images[selectedImage]}
               alt={product.name}

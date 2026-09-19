@@ -116,8 +116,8 @@ export const updateCartItem = async (req, res) => {
         const { itemId } = req.params;
         const { quantity } = req.body;
 
-        if (!Number.isInteger(quantity) || quantity < 1) {
-            return res.status(400).json({ error: "Số lượng phải lớn hơn 0" });
+        if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10000) {
+            return res.status(400).json({ error: "Số lượng phải lớn hơn 0 và nhỏ hơn 10000" });
         }
 
         const cart = await prisma.cart.findUnique({

@@ -8,14 +8,27 @@ function getLocation() {
 }
 
 export function navigate(to) {
+  const isAlreadyAtTarget = window.location.hash === `#${to}` || (window.location.hash === '' && to === '/');
   window.location.hash = to;
+  if (isAlreadyAtTarget || to === '/') {
+    if (!to.includes('scroll=catalog') && !to.includes('category=')) {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+  }
 }
 
 export function useRoute() {
   const [location, setLocation] = useState(getLocation);
 
   useEffect(() => {
-    const onHashChange = () => setLocation(getLocation());
+    const onHashChange = () => {
+      const nextLocation = getLocation();
+      setLocation(nextLocation);
+      // Khi quay lại trang chủ hoặc chuyển trang mà không yêu cầu vị trí scroll cụ thể, luôn cuộn lên đầu trang
+      if (!nextLocation.query.get('scroll') && !nextLocation.query.get('category')) {
+        window.scrollTo(0, 0);
+      }
+    };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);

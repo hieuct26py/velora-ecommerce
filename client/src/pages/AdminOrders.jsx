@@ -1,14 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { adminOrderApi, orderApi } from '../api';
 import StatusLabel from '../components/StatusLabel';
 import { Link } from '../router';
 
-const statuses = ['', 'PENDING', 'PAID', 'CANCELLED'];
+const statuses = [
+  { value: '', label: 'All orders' },
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'PAID', label: 'Paid' },
+  { value: 'CANCELLED', label: 'Cancelled' },
+];
 
 export default function AdminOrders() {
   const [orders, setOrders] = useState([]);
   const [meta, setMeta] = useState({ total: 0, page: 1, totalPages: 1 });
+  const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
+  const [amountTier, setAmountTier] = useState('ALL');
+  const [sortBy, setSortBy] = useState('newest');
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState(null);
@@ -20,33 +28,61 @@ export default function AdminOrders() {
   const [orderDetails, setOrderDetails] = useState({});
   const [loadingDetailId, setLoadingDetailId] = useState(null);
 
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await adminOrderApi.all({ status: status || undefined, page, limit: 12 });
-      setOrders(data.data);
-      setMeta(data.meta);
+      let minAmount;
+      let maxAmount;
+      if (amountTier === 'under_500') {
+        maxAmount = 500;
+      } else if (amountTier === '500_to_2000') {
+        minAmount = 500;
+        maxAmount = 2000;
+      } else if (amountTier === 'over_2000') {
+        minAmount = 2000;
+      }
+
+      const params = {
+        status: status || undefined,
+        search: search.trim() || undefined,
+        minAmount,
+        maxAmount,
+        sortBy,
+        page,
+        limit: 12,
+      };
+
+      const { data } = await adminOrderApi.all(params);
+      setOrders(data.data || []);
+      setMeta(data.meta || { total: 0, page: 1, totalPages: 1 });
       setError('');
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Orders could not be loaded.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [amountTier, status, search, sortBy, page]);
 
   useEffect(() => {
-    adminOrderApi.all({ status: status || undefined, page, limit: 12 })
-      .then(({ data }) => {
-        setOrders(data.data);
-        setMeta(data.meta);
-        setError('');
-      })
-      .catch((requestError) => setError(requestError.response?.data?.message || 'Orders could not be loaded.'))
-      .finally(() => setLoading(false));
-  }, [status, page]);
+    const timer = setTimeout(() => {
+      loadOrders();
+    }, 220);
+    return () => clearTimeout(timer);
+  }, [loadOrders]);
 
   const filterStatus = (value) => {
     setStatus(value);
+    setPage(1);
+    setExpandedId(null);
+  };
+
+  const isFiltered = Boolean(search.trim() || status || amountTier !== 'ALL' || sortBy !== 'newest');
+
+  const resetFilters = () => {
+    setSearch('');
+    setStatus('');
+    setAmountTier('ALL');
+    setSortBy('newest');
     setPage(1);
     setExpandedId(null);
   };
@@ -109,27 +145,102 @@ export default function AdminOrders() {
           <p className="eyebrow">Fulfilment / queue</p>
           <h1>Orders</h1>
         </div>
-        <select
-          className="admin-select"
-          value={status}
-          onChange={(event) => filterStatus(event.target.value)}
-          aria-label="Order status filter"
-        >
-          {statuses.map((value) => (
-            <option key={value} value={value}>{value || 'All statuses'}</option>
-          ))}
-        </select>
+        <button className="admin-refresh" type="button" onClick={loadOrders} disabled={loading}>
+          {loading ? 'Refreshing...' : 'Refresh queue'}
+        </button>
       </div>
 
       <div className="admin-intro-line">
-        <span>{meta.total} orders in the system</span>
-        <button className="admin-quiet-button" type="button" onClick={loadOrders}>
-          Refresh queue
-        </button>
+        <span>{meta.total} total orders in the system</span>
+        <span>Order fulfillment & processing</span>
       </div>
 
       {error && <div className="admin-notice" role="alert"><strong>{error}</strong></div>}
       {notice && <output className="admin-success">{notice}</output>}
+
+      {/* Orders Filter Toolbar */}
+      <div className="admin-filter-toolbar">
+        <div className="admin-filter-group">
+          <div className="admin-search-box">
+            <span className="admin-search-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            </span>
+            <input
+              type="text"
+              className="admin-search-input"
+              placeholder="Search #ID or customer email..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            />
+            {search && (
+              <button
+                type="button"
+                className="admin-search-clear"
+                onClick={() => { setSearch(''); setPage(1); }}
+                aria-label="Clear search"
+              >
+                ×
+              </button>
+            )}
+          </div>
+
+          {/* Status Segmented Pills */}
+          <div className="admin-filter-pills" role="tablist" aria-label="Filter orders by status">
+            {statuses.map((s) => (
+              <button
+                key={s.value}
+                type="button"
+                className={`admin-filter-pill ${status === s.value ? 'active' : ''}`}
+                onClick={() => filterStatus(s.value)}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+
+          <select
+            className={`admin-filter-select ${amountTier !== 'ALL' ? 'active-filter' : ''}`}
+            value={amountTier}
+            onChange={(e) => { setAmountTier(e.target.value); setPage(1); }}
+            aria-label="Filter by order amount"
+          >
+            <option value="ALL">All amounts</option>
+            <option value="under_500">Under $500</option>
+            <option value="500_to_2000">$500 – $2,000</option>
+            <option value="over_2000">Over $2,000</option>
+          </select>
+
+          <select
+            className="admin-filter-select"
+            value={sortBy}
+            onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
+            aria-label="Sort orders"
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="amount_desc">Amount: High to Low</option>
+            <option value="amount_asc">Amount: Low to High</option>
+          </select>
+        </div>
+
+        <div className="admin-filter-meta">
+          <span className="admin-filter-count">
+            Showing <strong>{orders.length}</strong> of {meta.total}
+          </span>
+          {isFiltered && (
+            <button
+              type="button"
+              className="admin-filter-reset"
+              onClick={resetFilters}
+            >
+              Reset filters
+            </button>
+          )}
+        </div>
+      </div>
 
       <section className="admin-order-table" aria-label="All orders">
         <div className="admin-order-head">
@@ -144,7 +255,19 @@ export default function AdminOrders() {
         {loading ? (
           <div className="admin-loading"><span className="loader-line" /> Loading order queue...</div>
         ) : orders.length === 0 ? (
-          <div className="admin-loading">No orders match this filter.</div>
+          <div className="admin-empty-box">
+            <span>No orders found matching your search or filters.</span>
+            {isFiltered && (
+              <button
+                type="button"
+                className="admin-quiet-button"
+                style={{ marginLeft: '12px' }}
+                onClick={resetFilters}
+              >
+                Clear all filters
+              </button>
+            )}
+          </div>
         ) : (
           orders.map((order) => {
             const isExpanded = expandedId === order.id;

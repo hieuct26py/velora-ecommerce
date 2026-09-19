@@ -72,7 +72,10 @@ export default function Profile() {
   if (!isAuthenticated) return null;
   if (isLoading) return <main className="page-width page-section"><div className="state-block">Loading your profile</div></main>;
 
-  const displayName = profile.name || user?.email?.split('@')[0] || 'Customer';
+  const emailPrefix = (profile.email || user?.email || '').split('@')[0];
+  const rawName = profile.name ? String(profile.name).trim() : '';
+  const isNameValid = rawName && rawName.toLowerCase() !== 'null' && rawName.toLowerCase() !== 'undefined';
+  const displayName = isNameValid ? rawName : (emailPrefix || 'Customer');
 
   return (
     <main className="page-width page-section profile-page">
@@ -93,7 +96,7 @@ export default function Profile() {
         <div className="profile-forms">
           <form className="profile-form" onSubmit={saveProfile}>
             <div className="form-heading"><p className="eyebrow">Personal details</p><h2>Make it yours.</h2><p>Your email stays attached to the account. Name and avatar are visible in your profile.</p></div>
-            <label>Name<input value={profile.name || ''} maxLength="120" onChange={(event) => updateProfileField('name', event.target.value)} placeholder="Your name" /></label>
+            <label>Name<input value={isNameValid ? profile.name : ''} maxLength="120" onChange={(event) => updateProfileField('name', event.target.value)} placeholder={emailPrefix || "Your name"} /></label>
             <label>Avatar URL<input type="url" value={profile.avatar_url || ''} maxLength="255" onChange={(event) => updateProfileField('avatar_url', event.target.value)} placeholder="https://..." /></label>
             <div className="form-actions"><button className="button button-dark" type="submit" disabled={isSavingProfile}>{isSavingProfile ? 'Saving...' : 'Save profile'}</button>{profileMessage && <output className="form-success">{profileMessage}</output>}{profileError && <span className="field-error" role="alert">{profileError}</span>}</div>
           </form>

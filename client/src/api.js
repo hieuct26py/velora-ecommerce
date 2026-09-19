@@ -73,10 +73,33 @@ export const userApi = {
   updateMe: (payload) => api.patch('/users/me', payload),
 };
 
+let categoriesCache = null;
+let categoriesPromise = null;
+
 export const catalogApi = {
   products: (params, signal) => api.get('/products', { params, signal }),
   product: (productId) => api.get(`/products/${productId}`),
-  categories: () => api.get('/categories'),
+  categories: () => {
+    if (categoriesCache) {
+      return Promise.resolve(categoriesCache);
+    }
+    if (!categoriesPromise) {
+      categoriesPromise = api.get('/categories')
+        .then((response) => {
+          categoriesCache = response;
+          return response;
+        })
+        .catch((error) => {
+          categoriesPromise = null;
+          throw error;
+        });
+    }
+    return categoriesPromise;
+  },
+  clearCategoriesCache: () => {
+    categoriesCache = null;
+    categoriesPromise = null;
+  },
 };
 
 export const adminProductApi = {

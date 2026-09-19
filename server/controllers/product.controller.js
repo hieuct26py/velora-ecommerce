@@ -5,11 +5,11 @@ import prisma from '../utils/prisma.js';
 
 export const getAllProducts = async (req, res) => {
     try {
-        const page = Number.parseInt(req.query.page) || 1;
-        const limit = Number.parseInt(req.query.limit) || 10;
+        const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+        const limit = Math.max(1, Number.parseInt(req.query.limit, 10) || 12);
         const skip = (page - 1) * limit;
         
-        const { keyword, minPrice, maxPrice, category, status = 'ACTIVE' } = req.query;
+        const { keyword, minPrice, maxPrice, category, status = 'ACTIVE', stockStatus, sortBy } = req.query;
 
         let whereCondition = {};
 
@@ -27,13 +27,21 @@ export const getAllProducts = async (req, res) => {
 
         if (keyword) {
             whereCondition.name = {
-                contains: keyword,
+                contains: String(keyword).trim(),
                 mode: 'insensitive',
             };
         }
 
         if (category) {
             whereCondition.category_id = category;
+        }
+
+        if (stockStatus === 'OUT_OF_STOCK') {
+            whereCondition.stock_quantity = 0;
+        } else if (stockStatus === 'LOW_STOCK') {
+            whereCondition.stock_quantity = { lte: 3, gt: 0 };
+        } else if (stockStatus === 'IN_STOCK') {
+            whereCondition.stock_quantity = { gt: 0 };
         }
 
         if (minPrice || maxPrice) {
@@ -46,6 +54,13 @@ export const getAllProducts = async (req, res) => {
             }
         }
 
+        let orderBy = { created_at: 'desc' };
+        if (sortBy === 'price_asc') orderBy = { price: 'asc' };
+        else if (sortBy === 'price_desc') orderBy = { price: 'desc' };
+        else if (sortBy === 'stock_asc') orderBy = { stock_quantity: 'asc' };
+        else if (sortBy === 'stock_desc') orderBy = { stock_quantity: 'desc' };
+        else if (sortBy === 'name_asc') orderBy = { name: 'asc' };
+        else if (sortBy === 'oldest') orderBy = { created_at: 'asc' };
 
         const [products, totalProducts] = await Promise.all([
             prisma.product.findMany({
@@ -53,20 +68,24 @@ export const getAllProducts = async (req, res) => {
                 skip,
                 take: limit,
                 include: {
-                    category: {select: { id: true, name: true }},
+                    category: { select: { id: true, name: true } },
                 },
-                orderBy: { created_at: 'desc' },
+                orderBy,
             }),
             prisma.product.count({ where: whereCondition }),
         ]);
 
+        const totalPages = Math.ceil(totalProducts / limit);
+
         return res.status(200).json({
             data: products,
             meta: {
+                totalItems: totalProducts,
+                totalPages,
+                currentPage: page,
                 total: totalProducts,
                 page,
                 limit,
-                totalPages: Math.ceil(totalProducts / limit),
             },
         });
     } 

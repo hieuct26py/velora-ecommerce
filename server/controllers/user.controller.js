@@ -24,7 +24,11 @@ export const getMe = async (req, res) => {
             return res.status(404).json({ message: 'Người dùng không tồn tại!' });
         }
 
-        return res.status(200).json({ data: user });
+        const rawName = user.name ? String(user.name).trim() : '';
+        const isNameSet = rawName && rawName.toLowerCase() !== 'null' && rawName.toLowerCase() !== 'undefined';
+        const cleanName = isNameSet ? rawName : (user.email ? user.email.split('@')[0] : null);
+
+        return res.status(200).json({ data: { ...user, name: cleanName } });
     } catch (error) {
         return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
     }
@@ -40,7 +44,9 @@ export const updateMe = async (req, res) => {
             if (normalizedName.length > 120) {
                 return res.status(400).json({ message: 'Tên không được dài quá 120 ký tự!' });
             }
-            data.name = normalizedName || null;
+            data.name = (!normalizedName || normalizedName.toLowerCase() === 'null' || normalizedName.toLowerCase() === 'undefined')
+                ? null
+                : normalizedName;
         }
 
         if (avatarUrl !== undefined) {
@@ -61,7 +67,11 @@ export const updateMe = async (req, res) => {
             select: profileSelect,
         });
 
-        return res.status(200).json({ message: 'Cập nhật hồ sơ thành công!', data: user });
+        const rawUpdatedName = user.name ? String(user.name).trim() : '';
+        const isUpdatedNameSet = rawUpdatedName && rawUpdatedName.toLowerCase() !== 'null' && rawUpdatedName.toLowerCase() !== 'undefined';
+        const cleanUpdatedName = isUpdatedNameSet ? rawUpdatedName : (user.email ? user.email.split('@')[0] : null);
+
+        return res.status(200).json({ message: 'Cập nhật hồ sơ thành công!', data: { ...user, name: cleanUpdatedName } });
     } catch (error) {
         return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
     }
@@ -72,28 +82,56 @@ export const getAllUsers = async (req, res) => {
         const page = Number.parseInt(req.query.page) || 1;
         const limit = Number.parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
+        const { search, role, status, sortBy } = req.query;
 
         let whereCondition = {};
-        if (req.query.status === 'active') {
+        if (status === 'active') {
             whereCondition.is_active = true;
-        }
-        if (req.query.status === 'inactive') {
+        } else if (status === 'inactive') {
             whereCondition.is_active = false;
         }
+
+        if (role && (role === 'CUSTOMER' || role === 'ADMIN')) {
+            whereCondition.role = role;
+        }
+
+        if (search) {
+            const query = String(search).trim();
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(query);
+            whereCondition.OR = [
+                { email: { contains: query, mode: 'insensitive' } },
+                { name: { contains: query, mode: 'insensitive' } },
+            ];
+            if (isUuid) {
+                whereCondition.OR.push({ id: query });
+            }
+        }
+
+        let orderBy = { created_at: 'desc' };
+        if (sortBy === 'oldest') orderBy = { created_at: 'asc' };
+        else if (sortBy === 'email_asc') orderBy = { email: 'asc' };
+        else if (sortBy === 'name_asc') orderBy = { name: 'asc' };
 
         const [users, totalUsers] = await Promise.all([
             prisma.user.findMany({
                 where: whereCondition,
                 skip,
                 take: limit,
-                select: { id: true, email: true, role: true, is_active: true, created_at: true },
-                orderBy: { created_at: 'desc' },
+                select: { id: true, email: true, name: true, avatar_url: true, role: true, is_active: true, created_at: true },
+                orderBy,
             }),
             prisma.user.count({ where: whereCondition }),
         ]);
 
+        const formattedUsers = users.map((u) => {
+            const rawName = u.name ? String(u.name).trim() : '';
+            const isNameSet = rawName && rawName.toLowerCase() !== 'null' && rawName.toLowerCase() !== 'undefined';
+            const cleanName = isNameSet ? rawName : (u.email ? u.email.split('@')[0] : 'User');
+            return { ...u, name: cleanName };
+        });
+
         return res.status(200).json({
-            data: users,
+            data: formattedUsers,
             meta: {
                 total: totalUsers,
                 page,

@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { authApi, getAccessToken, setAccessToken } from '../api';
+import { authApi, userApi, getAccessToken, setAccessToken } from '../api';
 
 const AuthContext = createContext(null);
 
@@ -9,23 +9,6 @@ const storedUser = localStorage.getItem('velora_user');
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(storedUser ? JSON.parse(storedUser) : null);
   const [isBooting, setIsBooting] = useState(Boolean(getAccessToken()));
-
-  useEffect(() => {
-    if (!getAccessToken()) {
-      return undefined;
-    }
-
-    authApi.refresh()
-      .then(({ data }) => setAccessToken(data.accessToken))
-      .catch(() => {
-        setAccessToken(null);
-        setUser(null);
-        localStorage.removeItem('velora_user');
-      })
-      .finally(() => setIsBooting(false));
-
-    return undefined;
-  }, []);
 
   const persistUser = (nextUser) => {
     setUser(nextUser);
@@ -36,10 +19,41 @@ export function AuthProvider({ children }) {
     }
   };
 
+  useEffect(() => {
+    if (!getAccessToken()) {
+      return undefined;
+    }
+
+    authApi.refresh()
+      .then(({ data }) => {
+        setAccessToken(data.accessToken);
+        return userApi.me();
+      })
+      .then(({ data: profileRes }) => {
+        if (profileRes?.data) {
+          persistUser(profileRes.data);
+        }
+      })
+      .catch(() => {
+        setAccessToken(null);
+        setUser(null);
+        localStorage.removeItem('velora_user');
+      })
+      .finally(() => setIsBooting(false));
+
+    return undefined;
+  }, []);
+
   const login = async (credentials) => {
     const { data } = await authApi.login(credentials);
     setAccessToken(data.accessToken);
-    persistUser({ id: data.id, email: data.email, role: data.role });
+    persistUser({
+      id: data.id,
+      email: data.email,
+      name: data.name,
+      avatar_url: data.avatar_url,
+      role: data.role,
+    });
     return data;
   };
 

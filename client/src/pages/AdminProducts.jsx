@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { adminProductApi, catalogApi } from '../api';
 import ConfirmModal from '../components/ConfirmModal';
 
@@ -24,9 +24,17 @@ function formFromProduct(product) {
 export default function AdminProducts() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
+
+  // Filters
+  const [search, setSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
   const [status, setStatus] = useState('ALL');
+  const [stockFilter, setStockFilter] = useState('ALL');
+  const [sortBy, setSortBy] = useState('newest');
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -36,32 +44,51 @@ export default function AdminProducts() {
   const [deactivateProduct, setDeactivateProduct] = useState(null);
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
 
-  const loadProducts = async () => {
+  const loadProducts = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await catalogApi.products({ status, page: 1, limit: 100 });
-      setProducts(data.data);
+      const params = {
+        status,
+        keyword: search.trim() || undefined,
+        category: selectedCategory || undefined,
+        stockStatus: stockFilter !== 'ALL' ? stockFilter : undefined,
+        sortBy,
+        page: 1,
+        limit: 200,
+      };
+      const { data } = await catalogApi.products(params);
+      setProducts(data.data || []);
+      setTotalCount(data.meta?.total || (data.data ? data.data.length : 0));
       setError('');
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Products could not be loaded.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [status, search, selectedCategory, stockFilter, sortBy]);
 
   useEffect(() => {
-    catalogApi.products({ status, page: 1, limit: 100 })
-      .then(({ data }) => {
-        setProducts(data.data);
-        setError('');
-      })
-      .catch((requestError) => setError(requestError.response?.data?.message || 'Products could not be loaded.'))
-      .finally(() => setLoading(false));
-  }, [status]);
+    const timer = setTimeout(() => {
+      loadProducts();
+    }, 220);
+    return () => clearTimeout(timer);
+  }, [loadProducts]);
 
   useEffect(() => {
     catalogApi.categories().then(({ data }) => setCategories(data.data)).catch(() => setCategories([]));
   }, []);
+
+  const isFiltered = Boolean(
+    search.trim() || selectedCategory || status !== 'ALL' || stockFilter !== 'ALL' || sortBy !== 'newest'
+  );
+
+  const resetFilters = () => {
+    setSearch('');
+    setSelectedCategory('');
+    setStatus('ALL');
+    setStockFilter('ALL');
+    setSortBy('newest');
+  };
 
   const updateField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
@@ -136,23 +163,14 @@ export default function AdminProducts() {
           <p className="eyebrow">Inventory management</p>
           <h1>Products</h1>
         </div>
-        <select
-          className="admin-select"
-          value={status}
-          onChange={(event) => setStatus(event.target.value)}
-          aria-label="Filter products by status"
-        >
-          <option value="ALL">All products</option>
-          <option value="ACTIVE">Active only</option>
-          <option value="INACTIVE">Inactive only</option>
-        </select>
+        <button className="admin-refresh" type="button" onClick={loadProducts} disabled={loading}>
+          {loading ? 'Refreshing...' : 'Refresh list'}
+        </button>
       </div>
 
       <div className="admin-intro-line">
-        <span>{products.length} products listed in database</span>
-        <button className="admin-quiet-button" type="button" onClick={loadProducts}>
-          Refresh list
-        </button>
+        <span>{totalCount} total products in catalog</span>
+        <span>Catalog & inventory management</span>
       </div>
 
       {error && <div className="admin-notice" role="alert"><strong>{error}</strong></div>}
@@ -265,6 +283,101 @@ export default function AdminProducts() {
         </form>
 
         <section className="admin-table-wrap">
+          {/* Enhanced Filter Toolbar */}
+          <div className="admin-filter-toolbar">
+            <div className="admin-filter-group">
+              <div className="admin-search-box">
+                <span className="admin-search-icon">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                </span>
+                <input
+                  type="text"
+                  className="admin-search-input"
+                  placeholder="Search name or #ID..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                {search && (
+                  <button
+                    type="button"
+                    className="admin-search-clear"
+                    onClick={() => setSearch('')}
+                    aria-label="Clear search"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+
+              <select
+                className={`admin-filter-select ${selectedCategory ? 'active-filter' : ''}`}
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                aria-label="Filter products by category"
+              >
+                <option value="">All categories</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>{category.name}</option>
+                ))}
+              </select>
+
+              <select
+                className={`admin-filter-select ${status !== 'ALL' ? 'active-filter' : ''}`}
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                aria-label="Filter products by status"
+              >
+                <option value="ALL">All visibility</option>
+                <option value="ACTIVE">Active only</option>
+                <option value="INACTIVE">Inactive only</option>
+              </select>
+
+              <select
+                className={`admin-filter-select ${stockFilter !== 'ALL' ? 'active-filter' : ''}`}
+                value={stockFilter}
+                onChange={(e) => setStockFilter(e.target.value)}
+                aria-label="Filter products by stock"
+              >
+                <option value="ALL">All stock</option>
+                <option value="IN_STOCK">In stock (&gt;0)</option>
+                <option value="LOW_STOCK">Low stock (≤3)</option>
+                <option value="OUT_OF_STOCK">Out of stock (0)</option>
+              </select>
+
+              <select
+                className="admin-filter-select"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                aria-label="Sort products"
+              >
+                <option value="newest">Newest added</option>
+                <option value="price_asc">Price: Low to High</option>
+                <option value="price_desc">Price: High to Low</option>
+                <option value="stock_asc">Stock: Low to High</option>
+                <option value="stock_desc">Stock: High to Low</option>
+                <option value="name_asc">Name: A to Z</option>
+              </select>
+            </div>
+
+            <div className="admin-filter-meta">
+              <span className="admin-filter-count">
+                Showing <strong>{products.length}</strong> of {totalCount}
+              </span>
+              {isFiltered && (
+                <button
+                  type="button"
+                  className="admin-filter-reset"
+                  onClick={resetFilters}
+                >
+                  Reset filters
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="admin-table-head">
             <span>Product</span>
             <span>Category</span>
@@ -276,6 +389,20 @@ export default function AdminProducts() {
 
           {loading ? (
             <div className="admin-loading"><span className="loader-line" /> Loading products...</div>
+          ) : products.length === 0 ? (
+            <div className="admin-empty-box">
+              <span>No products match the selected filters.</span>
+              {isFiltered && (
+                <button
+                  type="button"
+                  className="admin-quiet-button"
+                  style={{ marginLeft: '12px' }}
+                  onClick={resetFilters}
+                >
+                  Clear all filters
+                </button>
+              )}
+            </div>
           ) : (
             <div className="admin-table">
               {products.map((product) => {

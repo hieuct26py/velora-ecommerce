@@ -35,16 +35,18 @@ export const register = async (req, res, next) => {
             return res.status(400).json({ message: `Mật khẩu phải có độ dài từ ${MIN_PASSWORD_LENGTH} đến ${MAX_PASSWORD_LENGTH} ký tự!` });
         }
 
+        const defaultName = normalizedEmail.includes('@') ? normalizedEmail.split('@')[0] : normalizedEmail;
         const passwordHash = await bcrypt.hash(password, 10);
         const verificationToken = crypto.randomBytes(32).toString('hex');
         const user = await prisma.user.create({
             data: {
                 email: normalizedEmail,
+                name: defaultName,
                 password_hash: passwordHash,
                 role: 'CUSTOMER',
                 verification_token: verificationToken
             },
-            select: { id: true, email: true, role: true, created_at: true },
+            select: { id: true, email: true, name: true, role: true, created_at: true },
         });
 
         return res.status(201).json({ message: 'Đăng ký thành công!', user });
@@ -93,11 +95,17 @@ export const login = async (req, res, next) => {
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
+        const rawName = user.name ? String(user.name).trim() : '';
+        const isNameSet = rawName && rawName.toLowerCase() !== 'null' && rawName.toLowerCase() !== 'undefined';
+        const cleanName = isNameSet ? rawName : (user.email ? user.email.split('@')[0] : null);
+
         return res.status(200).json({
             message: 'Đăng nhập thành công',
             accessToken,
             id: user.id,
             email: user.email,
+            name: cleanName,
+            avatar_url: user.avatar_url,
             role: user.role,
         });
     } catch (error) {

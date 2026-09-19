@@ -75,6 +75,9 @@ export function CartProvider({ children }) {
   };
 
   useEffect(() => {
+    if (guestItems.length === 0 && !isAuthenticated) {
+      return;
+    }
     catalogApi.products({ limit: 100 })
       .then(({ data }) => {
         const map = {};
@@ -86,7 +89,7 @@ export function CartProvider({ children }) {
         setStockMap(map);
       })
       .catch(() => {});
-  }, []);
+  }, [guestItems.length, isAuthenticated]);
 
   const loadServerCart = async () => {
     setIsLoading(true);

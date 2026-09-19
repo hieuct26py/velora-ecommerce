@@ -120,7 +120,7 @@ export const getMyOrders = async (req, res, next) => {
 
 export const getAllOrders = async (req, res, next) => {
     try {
-        const { status, page = 1, limit = 10 } = req.query;
+        const { status, search, minAmount, maxAmount, sortBy, page = 1, limit = 10 } = req.query;
         const pageNumber = Number(page);
         const limitNumber = Number(limit);
         const skip = (pageNumber - 1) * limitNumber;
@@ -131,15 +131,47 @@ export const getAllOrders = async (req, res, next) => {
             return res.status(400).json({ message: 'Trạng thái đơn hàng không hợp lệ' });
         }
 
-        const whereCondition = normalizedStatus ? { status: normalizedStatus } : {};
+        const whereCondition = {};
+        if (normalizedStatus) {
+            whereCondition.status = normalizedStatus;
+        }
+
+        if (search) {
+            const rawSearch = String(search).trim().replace(/^#/, '');
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawSearch);
+            if (isUuid) {
+                whereCondition.OR = [
+                    { id: rawSearch },
+                    { user: { email: { contains: rawSearch, mode: 'insensitive' } } }
+                ];
+            } else {
+                whereCondition.user = {
+                    OR: [
+                        { email: { contains: rawSearch, mode: 'insensitive' } },
+                        { name: { contains: rawSearch, mode: 'insensitive' } }
+                    ]
+                };
+            }
+        }
+
+        if (minAmount || maxAmount) {
+            whereCondition.total_amount = {};
+            if (minAmount) whereCondition.total_amount.gte = Number(minAmount);
+            if (maxAmount) whereCondition.total_amount.lte = Number(maxAmount);
+        }
+
+        let orderBy = { created_at: 'desc' };
+        if (sortBy === 'oldest') orderBy = { created_at: 'asc' };
+        else if (sortBy === 'amount_desc') orderBy = { total_amount: 'desc' };
+        else if (sortBy === 'amount_asc') orderBy = { total_amount: 'asc' };
 
         const [orders, total] = await Promise.all([
             prisma.order.findMany({
                 where: whereCondition,
                 skip: Number(skip),
                 take: limitNumber,
-                orderBy: { created_at: 'desc' },
-                include: { user: { select: { email: true } } }
+                orderBy,
+                include: { user: { select: { email: true, name: true } } }
             }),
             prisma.order.count({ where: whereCondition })
         ]);
