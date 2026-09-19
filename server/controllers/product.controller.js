@@ -1,9 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import prisma from '../utils/prisma.js';
 
 // const prisma = new PrismaClient();
 
-export const getAllProducts = async (req, res) => {
+export const getAllProducts = async (req, res, next) => {
     try {
         const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
         const limit = Math.max(1, Number.parseInt(req.query.limit, 10) || 12);
@@ -90,11 +89,11 @@ export const getAllProducts = async (req, res) => {
         });
     } 
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
-export const getProductById = async (req, res) => {
+export const getProductById = async (req, res, next) => {
     try {
         const { productId } = req.params;
 
@@ -116,24 +115,39 @@ export const getProductById = async (req, res) => {
         return res.status(200).json({ data: product });
     }
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
-export const createProduct = async (req, res) => {
+export const createProduct = async (req, res, next) => {
     try {
         const { name, description, price, stock_quantity, category_id, images } = req.body;
 
-        if (!name || price === undefined) {
+        if (!name || price === undefined || typeof name !== 'string' || name.trim().length === 0) {
             return res.status(400).json({ message: 'Tên và giá sản phẩm là bắt buộc!' });
+        }
+
+        if (name.trim().length > 255) {
+            return res.status(400).json({ message: 'Tên sản phẩm tối đa 255 ký tự!' });
+        }
+        const numericPrice = Number(price);
+        if (price === undefined || !Number.isFinite(numericPrice) || numericPrice < 0) {
+            return res.status(400).json({ message: 'Giá sản phẩm phải là số dương!' });
+        }
+        const qty = Number(stock_quantity) || 0;
+        if (!Number.isInteger(qty) || qty < 0) {
+            return res.status(400).json({ message: 'Số lượng tồn kho phải là số nguyên không âm!' });
+        }
+        if (images && (!Array.isArray(images) || images.some(url => typeof url !== 'string'))) {
+            return res.status(400).json({ message: 'Images phải là mảng URL hợp lệ!' });
         }
 
         const product = await prisma.product.create({
             data: {
-                name,
+                name: name.trim(),
                 description,
-                price,
-                stock_quantity: stock_quantity || 0,
+                price: numericPrice,
+                stock_quantity: qty,
                 category_id: category_id || null,
                 images: images || [],
             },
@@ -141,11 +155,11 @@ export const createProduct = async (req, res) => {
         return res.status(201).json({ data: product });
     }
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
-export const updateProduct = async (req, res) => {
+export const updateProduct = async (req, res, next) => {
     try {
         const { productId } = req.params;
         const { name, description, price, stock_quantity, category_id, images, is_active } = req.body;
@@ -174,11 +188,11 @@ export const updateProduct = async (req, res) => {
         return res.status(200).json({ data: updatedProduct });
     }
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
-export const deleteProduct = async (req, res) => {
+export const deleteProduct = async (req, res, next) => {
     try {
         const { productId } = req.params;
 
@@ -198,6 +212,6 @@ export const deleteProduct = async (req, res) => {
         return res.status(200).json({ data: deletedProduct });
     }
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };

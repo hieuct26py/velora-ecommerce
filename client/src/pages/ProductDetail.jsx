@@ -24,6 +24,14 @@ export default function ProductDetail() {
       .catch(() => setError('This product is no longer available.'));
   }, [productId]);
 
+  useEffect(() => {
+    if (product?.name) {
+      document.title = `${product.name} | Velora`;
+    } else {
+      document.title = 'Chi tiết sản phẩm | Velora';
+    }
+  }, [product]);
+
   if (error) {
     return (
       <main className="page-width page-section">

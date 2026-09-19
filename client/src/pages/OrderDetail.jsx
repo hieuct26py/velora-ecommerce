@@ -30,6 +30,14 @@ export default function OrderDetail() {
       .finally(() => setLoading(false));
   }, [orderId, isAuthenticated, isBooting]);
 
+  useEffect(() => {
+    if (order?.id) {
+      document.title = `Đơn hàng #${order.id.slice(0, 8)} | Velora`;
+    } else {
+      document.title = 'Chi tiết đơn hàng | Velora';
+    }
+  }, [order]);
+
   const handleCancelOrder = async () => {
     if (!order || order.status !== 'PENDING') return;
 

@@ -17,7 +17,6 @@ import { errorHandler } from './middlewares/errorHandler.js';
 dotenv.config();
 
 const app = express();
-app.disable('x-powered-by');
 const PORT = Number(process.env.PORT) || 5000;
 
 const ALLOWED_ORIGINS = [
@@ -36,19 +35,20 @@ app.use(cors({
   },
   credentials: true,
 }));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '10mb' , type: 'application/json'}));
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 app.set('trust proxy', 1);
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
   contentSecurityPolicy: false,
+  hsts: { maxAge: 31536000, includeSubDomains: true },
 }))
 app.disable('x-powered-by');
 
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  max: 500, // Limit each IP to 100 requests per windowMs
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   message: 'Too many requests from this IP, please try again later.',
 });

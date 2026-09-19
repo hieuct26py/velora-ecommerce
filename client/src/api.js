@@ -141,7 +141,7 @@ export const cartApi = {
 
 export const orderApi = {
   create: (payload) => api.post('/orders', payload),
-  mine: () => api.get('/orders/me'),
+  mine: (params, signal) => api.get('/orders/me', { params, signal }),
   get: (orderId) => api.get(`/orders/${orderId}`),
   cancel: (orderId) => api.patch(`/orders/${orderId}`),
 };

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import Navbar from './components/Navbar';
 import { AuthProvider } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
@@ -17,8 +18,35 @@ import AdminOrders from './pages/AdminOrders';
 import AdminCategories from './pages/AdminCategories';
 import AdminUsers from './pages/AdminUsers';
 
+const ROUTE_TITLES = {
+  '/': 'Trang chủ | Velora',
+  '/cart': 'Giỏ hàng | Velora',
+  '/checkout': 'Thanh toán | Velora',
+  '/auth': 'Đăng nhập & Đăng ký | Velora',
+  '/profile': 'Tài khoản của tôi | Velora',
+  '/orders': 'Lịch sử đơn hàng | Velora',
+  '/admin/analytics': 'Tổng quan | Velora Admin',
+  '/admin/products': 'Quản lý sản phẩm | Velora Admin',
+  '/admin/orders': 'Quản lý đơn hàng | Velora Admin',
+  '/admin/categories': 'Quản lý danh mục | Velora Admin',
+  '/admin/users': 'Quản lý người dùng | Velora Admin',
+};
+
 function RoutedApp() {
   const { path } = useRoute();
+
+  useEffect(() => {
+    if (ROUTE_TITLES[path]) {
+      document.title = ROUTE_TITLES[path];
+    } else if (path.startsWith('/product/')) {
+      document.title = 'Chi tiết sản phẩm | Velora';
+    } else if (path.startsWith('/orders/')) {
+      document.title = 'Chi tiết đơn hàng | Velora';
+    } else {
+      document.title = 'Velora - Premium Tech';
+    }
+  }, [path]);
+
   let page = <Home />;
   if (path === '/cart') page = <Cart />;
   if (path === '/checkout') page = <Checkout />;
@@ -37,10 +65,17 @@ function RoutedApp() {
     <div className="app-shell">
       <Navbar />
       {page}
-      <footer className="site-footer page-width"><span>VELORA / Apple devices and accessories</span><span>Technology, considered.</span></footer>
+      <footer className="site-footer page-width">
+        <div className="site-footer-brand">
+          <img src="/images/velora-v-mark.png" alt="V" className="site-footer-v" />
+          <span>ELORA / Apple devices and accessories</span>
+        </div>
+        <span>Technology, considered.</span>
+      </footer>
     </div>
   );
 }
+
 
 export default function App() {
   return <AuthProvider><CartProvider><RoutedApp /></CartProvider></AuthProvider>;

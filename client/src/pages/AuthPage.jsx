@@ -32,7 +32,11 @@ export default function AuthPage() {
 
   return (
     <main className="page-width page-section auth-layout">
-      <section className="auth-copy"><p className="eyebrow">Velora account</p><h1>Keep the good<br /><em>things close.</em></h1><p>Sign in to sync your cart, place orders, and keep a clear record of what you chose.</p></section>
+      <section className="auth-copy">
+        <p className="eyebrow">Velora account</p>
+        <h1>Keep the good<br /><em>things close.</em></h1>
+        <p>Sign in to sync your cart, place orders, and keep a clear record of what you chose.</p>
+      </section>
       <form className="auth-form" onSubmit={submit}>
         <div className="auth-tabs"><button className={mode === 'login' ? 'active' : ''} type="button" onClick={() => setMode('login')}>Sign in</button><button className={mode === 'register' ? 'active' : ''} type="button" onClick={() => setMode('register')}>Create account</button></div>
         <label>Email<input type="email" value={form.email} required autoComplete="email" onChange={(event) => setForm({ ...form, email: event.target.value })} /></label>
