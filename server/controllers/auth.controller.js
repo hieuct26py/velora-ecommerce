@@ -1,4 +1,3 @@
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'node:crypto';
@@ -141,9 +140,21 @@ export const changePassword = async (req, res, next) => {
         }
 
         const passwordHash = await bcrypt.hash(newPassword, 10);
-        await prisma.user.update({
-            where: { id: user.id },
-            data: { password_hash: passwordHash },
+        await prisma.$transaction([
+            prisma.user.update({
+                where: { id: user.id },
+                data: { password_hash: passwordHash },
+            }),
+            prisma.refreshToken.updateMany({
+                where: { user_id: user.id, revoked: false },
+                data: { revoked: true },
+            }),
+        ]);
+
+        res.clearCookie('refreshToken', {
+            httpOnly: true,
+            sameSite: 'strict',
+            secure: process.env.NODE_ENV === 'production',
         });
 
         return res.status(200).json({ message: 'Đổi mật khẩu thành công!' });

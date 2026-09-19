@@ -136,7 +136,12 @@ export default function Cart() {
       {isLoading && <div className="state-block"><span className="loader-line" /> Updating your cart...</div>}
 
       {!isLoading && cart.items.length === 0 && (
-        <div className="empty-panel">
+        <div className="empty-panel cart-empty-panel">
+          <img
+            src="/images/custom-cart-velora-icon.jpg"
+            alt="Giỏ hàng trống"
+            className="cart-empty-art"
+          />
           <p className="eyebrow">Nothing here yet</p>
           <h2>Start with your next device.</h2>
           <Link className="button button-dark" to="/">Browse the collection</Link>

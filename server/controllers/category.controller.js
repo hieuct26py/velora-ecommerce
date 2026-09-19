@@ -1,9 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import prisma from '../utils/prisma.js';
 
 // const prisma = new PrismaClient();
 
-export const getAllCategories = async (req, res) => {
+export const getAllCategories = async (req, res, next) => {
     try {
         const categories = await prisma.category.findMany({
             orderBy: { name: 'asc' }
@@ -12,11 +11,11 @@ export const getAllCategories = async (req, res) => {
         return res.status(200).json({ data: categories });
     }
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
-export const getCategoryById = async (req, res) => {
+export const getCategoryById = async (req, res, next) => {
     try {
         const { categoryId } = req.params;
 
@@ -31,11 +30,11 @@ export const getCategoryById = async (req, res) => {
         return res.status(200).json({ data: category });
     }
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
-export const createCategory = async (req, res) => {
+export const createCategory = async (req, res, next) => {
     try {
         const { name, description, image_url } = req.body;
 
@@ -58,11 +57,11 @@ export const createCategory = async (req, res) => {
         return res.status(201).json({ data: category });
     }
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
-export const updateCategory = async (req, res) => {
+export const updateCategory = async (req, res, next) => {
     try {
         const { categoryId } = req.params;
         const { name, description, image_url } = req.body;
@@ -91,12 +90,12 @@ export const updateCategory = async (req, res) => {
         return res.status(200).json({ data: updatedCategory });
     }
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
 
-export const deleteCategory = async (req, res) => {
+export const deleteCategory = async (req, res, next) => {
     try {
         const { categoryId } = req.params;
 
@@ -120,6 +119,6 @@ export const deleteCategory = async (req, res) => {
         return res.status(200).json({ message: 'Xóa danh mục thành công!' });
     }
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };

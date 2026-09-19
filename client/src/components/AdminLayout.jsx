@@ -33,7 +33,13 @@ export default function AdminLayout({ children }) {
   return (
     <div className="admin-shell">
       <aside className="admin-sidebar">
-        <div className="admin-brand"><Link to="/">VELORA<span>/</span></Link><p>Operations desk</p></div>
+        <div className="admin-brand">
+          <Link to="/" className="admin-brand-link">
+            <img src="/images/velora-v-mark.png" alt="V" className="admin-brand-v" />
+            <span className="admin-brand-text">ELORA<span className="admin-brand-mark">/</span></span>
+          </Link>
+          <p>Operations desk</p>
+        </div>
         <nav className="admin-nav" aria-label="Admin navigation">
           {navItems.map((item) => <Link key={item.path} className={path === item.path ? 'active' : ''} to={item.path}><span>{item.index}</span>{item.label}</Link>)}
         </nav>

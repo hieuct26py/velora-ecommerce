@@ -1,4 +1,3 @@
-import { PrismaClient } from "@prisma/client";
 import prisma from '../utils/prisma.js';
 
 // const prisma = new PrismaClient();
@@ -96,11 +95,69 @@ export const createOrder = async (req, res, next) => {
 
 export const getMyOrders = async (req, res, next) => {
     try {
-        const orders = await prisma.order.findMany({
-            where: { user_id: req.user.sub },
-            orderBy: { created_at: 'desc' },
-            include: { items: { include: { product: { select: { name: true, images: true } } } } }
-        });
+        const userId = req.user.sub;
+        const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+        const limit = Math.max(1, Number.parseInt(req.query.limit, 10) || 10);
+        const skip = (page - 1) * limit;
+
+        const { status, search, minAmount, maxAmount, sortBy } = req.query;
+
+        const whereCondition = { user_id: userId };
+
+        const validStatuses = ['PENDING', 'PAID', 'CANCELLED'];
+        const normalizedStatus = status?.toUpperCase();
+        if (normalizedStatus && validStatuses.includes(normalizedStatus)) {
+            whereCondition.status = normalizedStatus;
+        }
+
+        if (search) {
+            const rawSearch = String(search).trim().replace(/^#/, '');
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawSearch);
+            if (isUuid) {
+                whereCondition.OR = [
+                    { id: rawSearch },
+                    {
+                        items: {
+                            some: {
+                                product: {
+                                    name: { contains: rawSearch, mode: 'insensitive' }
+                                }
+                            }
+                        }
+                    }
+                ];
+            } else {
+                whereCondition.items = {
+                    some: {
+                        product: {
+                            name: { contains: rawSearch, mode: 'insensitive' }
+                        }
+                    }
+                };
+            }
+        }
+
+        if (minAmount || maxAmount) {
+            whereCondition.total_amount = {};
+            if (minAmount) whereCondition.total_amount.gte = Number(minAmount);
+            if (maxAmount) whereCondition.total_amount.lte = Number(maxAmount);
+        }
+
+        let orderBy = { created_at: 'desc' };
+        if (sortBy === 'oldest') orderBy = { created_at: 'asc' };
+        else if (sortBy === 'amount_desc' || sortBy === 'price_desc') orderBy = { total_amount: 'desc' };
+        else if (sortBy === 'amount_asc' || sortBy === 'price_asc') orderBy = { total_amount: 'asc' };
+
+        const [orders, total] = await Promise.all([
+            prisma.order.findMany({
+                where: whereCondition,
+                skip,
+                take: limit,
+                orderBy,
+                include: { items: { include: { product: { select: { name: true, images: true } } } } }
+            }),
+            prisma.order.count({ where: whereCondition })
+        ]);
 
         const formattedOrders = orders.map(order => ({
             ...order,
@@ -111,7 +168,19 @@ export const getMyOrders = async (req, res, next) => {
             }))
         }));
 
-        return res.status(200).json({ data: formattedOrders });
+        const totalPages = Math.ceil(total / limit) || 1;
+
+        return res.status(200).json({
+            data: formattedOrders,
+            meta: {
+                total,
+                totalItems: total,
+                page,
+                currentPage: page,
+                limit,
+                totalPages
+            }
+        });
     }
     catch (error) {
         next(error);

@@ -1,7 +1,6 @@
-import { PrismaClient } from "@prisma/client";
 import prisma from "../utils/prisma.js";
 
-export const getTotalSales = async (req, res) => {
+export const getTotalSales = async (req, res, next) => {
     try {
         const aggregation = await prisma.order.aggregate({
             _sum: { total_amount: true },
@@ -13,16 +12,16 @@ export const getTotalSales = async (req, res) => {
         return res.status(200).json({ data: totalSales });
     } 
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
-export const getTotalOrders = async (req, res) => {
+export const getTotalOrders = async (req, res, next) => {
     try {
         const totalOrders = await prisma.order.count();
         return res.status(200).json({ data: totalOrders });
     } 
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };

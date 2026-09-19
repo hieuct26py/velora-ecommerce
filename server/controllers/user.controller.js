@@ -1,4 +1,3 @@
-import { PrismaClient } from '@prisma/client';
 import prisma from '../utils/prisma.js';
 
 // const prisma = new PrismaClient();
@@ -13,7 +12,10 @@ const profileSelect = {
     created_at: true,
 };
 
-export const getMe = async (req, res) => {
+const VALID_ROLES = ['CUSTOMER', 'ADMIN'];
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export const getMe = async (req, res, next) => {
     try {
         const user = await prisma.user.findUnique({
             where: { id: req.user.sub },
@@ -30,11 +32,11 @@ export const getMe = async (req, res) => {
 
         return res.status(200).json({ data: { ...user, name: cleanName } });
     } catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
-export const updateMe = async (req, res) => {
+export const updateMe = async (req, res, next) => {
     try {
         const { name, avatar_url: avatarUrl } = req.body;
         const data = {};
@@ -73,11 +75,11 @@ export const updateMe = async (req, res) => {
 
         return res.status(200).json({ message: 'Cập nhật hồ sơ thành công!', data: { ...user, name: cleanUpdatedName } });
     } catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
-export const getAllUsers = async (req, res) => {
+export const getAllUsers = async (req, res, next) => {
     try {
         const page = Number.parseInt(req.query.page) || 1;
         const limit = Number.parseInt(req.query.limit) || 10;
@@ -141,11 +143,11 @@ export const getAllUsers = async (req, res) => {
         });
     }
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
-export const getUserById = async (req, res) => {
+export const getUserById = async (req, res, next) => {
     try {
         const { userId } = req.params;
 
@@ -165,11 +167,11 @@ export const getUserById = async (req, res) => {
         return res.status(200).json({ data: user });
     }
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
-export const updateUser = async (req, res) => {
+export const updateUser = async (req, res, next) => {
     try {
         const { userId } = req.params;
         const currentUser = await prisma.user.findUnique({ where: { id: userId } });
@@ -186,6 +188,10 @@ export const updateUser = async (req, res) => {
         const updatedData = {};
 
         if (email) {
+            const normalizedEmail = String(email).trim().toLowerCase();
+            if (!EMAIL_REGEX.test(normalizedEmail)) {
+                return res.status(400).json({ message: 'Email không hợp lệ!' });
+            }
             const existingUser = await prisma.user.findUnique({ where: { email } });
             if (existingUser && existingUser.id !== userId) {
                 return res.status(400).json({ message: 'Email đã được sử dụng bởi người dùng khác!' });
@@ -194,6 +200,9 @@ export const updateUser = async (req, res) => {
         }
 
         if (role && req.user.role === 'ADMIN') {
+            if (!VALID_ROLES.includes(role)) {
+                return res.status(400).json({ message: 'Vai trò không hợp lệ!' });
+            }
             updatedData.role = role;
         }
 
@@ -210,11 +219,11 @@ export const updateUser = async (req, res) => {
         return res.status(200).json({ message: 'Cập nhật người dùng thành công!', data: updatedUser });
     }
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };
 
-export const toggleUserStatus = async (req, res) => {
+export const toggleUserStatus = async (req, res, next) => {
     try {
         const { userId } = req.params;
 
@@ -228,10 +237,21 @@ export const toggleUserStatus = async (req, res) => {
             return res.status(404).json({ message: 'Người dùng không tồn tại!' });
         }
 
-        const updatedUser = await prisma.user.update({
-            where: { id: userId },
-            data: { is_active: !targetUser.is_active },
-            select: { id: true, email: true, role: true, is_active: true },
+        const updatedUser = await prisma.$transaction(async (tx) => {
+            const updated = await tx.user.update({
+                where: { id: userId },
+                data: { is_active: !targetUser.is_active },
+                select: { id: true, email: true, role: true, is_active: true },
+            });
+
+            if (!updated.is_active) {
+                await tx.refreshToken.updateMany({
+                    where: { user_id: userId, revoked: false },
+                    data: { revoked: true },
+                });
+            }
+
+            return updated;
         });
 
         const statusMessage = updatedUser.is_active ? 'Kích hoạt tài khoản thành công!' : 'Vô hiệu hóa tài khoản thành công!';
@@ -239,6 +259,6 @@ export const toggleUserStatus = async (req, res) => {
         return res.status(200).json({ message: statusMessage, data: updatedUser });
     }
     catch (error) {
-        return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+        next(error);
     }
 };

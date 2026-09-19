@@ -164,7 +164,7 @@ export default function Navbar() {
       <div className="sd-tier1">
         <div className="sd-tier1-container">
           
-          {/* Brand Logo */}
+          {/* Brand Logo: V logo mark + ELORA/ wordmark */}
           <Link
             to="/"
             className="sd-brand"
@@ -173,7 +173,13 @@ export default function Navbar() {
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
           >
-            VELORA<span className="sd-brand-mark">/</span>
+            <img
+              src="/images/velora-v-mark.png"
+              alt="V"
+              className="sd-brand-v"
+            />
+            <span className="sd-brand-text">ELORA</span>
+            <span className="sd-brand-mark">/</span>
           </Link>
 
           {/* Search Bar bo tròn (rounded-full), nền trắng, icon kính lúp, placeholder "Bạn tìm gì..." */}
