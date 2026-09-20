@@ -30,7 +30,8 @@ app.use(cors({
     if (!origin || ALLOWED_ORIGINS.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      // callback(new Error('Not allowed by CORS'));
+      callback(null, false);
     }
   },
   credentials: true,
@@ -48,9 +49,9 @@ app.disable('x-powered-by');
 
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // Limit each IP to 100 requests per windowMs
+  max: 500, // Limit each IP to 500 requests per windowMs
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  message: 'Too many requests from this IP, please try again later.',
+  message: { message: 'Too many requests from this IP, please try again later.' },
 });
 
 app.get('/api/v1/health', (req, res) => {
