@@ -11,7 +11,7 @@ export const verifyToken = (req, res, next) => {
 
     jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decodedPayload) => {
         if (err) {
-            return res.status(403).json({ message: 'Token không hợp lệ hoặc đã hết hạn!' });
+            return res.status(401).json({ message: 'Token không hợp lệ hoặc đã hết hạn!' });
         }
         req.user = decodedPayload;
         next();

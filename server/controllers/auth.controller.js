@@ -59,6 +59,10 @@ export const login = async (req, res, next) => {
         const { email, password } = req.body;
         const normalizedEmail = String(email || '').trim().toLowerCase();
 
+        if (!normalizedEmail || !password || !EMAIL_REGEX.test(normalizedEmail) || typeof password !== 'string') {
+            return res.status(400).json({ message: 'Email hoặc mật khẩu không hợp lệ!' });
+        }
+
         const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
         if (!user) {
             // return res.status(401).json({ message: 'Email không tồn tại!' });
@@ -90,7 +94,7 @@ export const login = async (req, res, next) => {
         res.cookie('refreshToken', refreshToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
@@ -153,7 +157,7 @@ export const changePassword = async (req, res, next) => {
 
         res.clearCookie('refreshToken', {
             httpOnly: true,
-            sameSite: 'strict',
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
             secure: process.env.NODE_ENV === 'production',
         });
 
@@ -173,7 +177,7 @@ export const refreshToken = async (req, res, next) => {
 
         const cookieOptions = {
             httpOnly: true,
-            sameSite: 'strict',
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
             secure: process.env.NODE_ENV === 'production',
         };
 
@@ -236,7 +240,7 @@ export const logout = async (req, res, next) => {
 
         res.clearCookie('refreshToken', {
             httpOnly: true,
-            sameSite: 'strict',
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
             secure: process.env.NODE_ENV === 'production',
         });
 
