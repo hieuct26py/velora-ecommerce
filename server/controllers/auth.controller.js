@@ -20,18 +20,18 @@ export const register = async (req, res, next) => {
         }
 
         const normalizedEmail = String(email).trim().toLowerCase();
-        const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-
-        if (existingUser) {
-            return res.status(400).json({ message: 'Email đã được sử dụng!' });
-        }
-
         if (!EMAIL_REGEX.test(normalizedEmail)) {
             return res.status(400).json({ message: 'Email không hợp lệ!' });
         }
 
         if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
             return res.status(400).json({ message: `Mật khẩu phải có độ dài từ ${MIN_PASSWORD_LENGTH} đến ${MAX_PASSWORD_LENGTH} ký tự!` });
+        }
+
+        const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+
+        if (existingUser) {
+            return res.status(400).json({ message: 'Email đã được sử dụng!' });
         }
 
         const defaultName = normalizedEmail.includes('@') ? normalizedEmail.split('@')[0] : normalizedEmail;

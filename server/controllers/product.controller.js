@@ -1,4 +1,5 @@
 import prisma from '../utils/prisma.js';
+import { isValidUuid } from '../middlewares/validateUuid.js';
 
 // const prisma = new PrismaClient();
 
@@ -32,6 +33,9 @@ export const getAllProducts = async (req, res, next) => {
         }
 
         if (category) {
+            if (!isValidUuid(category)) {
+                return res.status(400).json({ message: 'Category ID không hợp lệ!' });
+            }
             whereCondition.category_id = category;
         }
 
@@ -141,6 +145,9 @@ export const createProduct = async (req, res, next) => {
         if (images && (!Array.isArray(images) || images.some(url => typeof url !== 'string'))) {
             return res.status(400).json({ message: 'Images phải là mảng URL hợp lệ!' });
         }
+        if (category_id && !isValidUuid(category_id)) {
+            return res.status(400).json({ message: 'Category ID không hợp lệ!' });
+        }
 
         const product = await prisma.product.create({
             data: {
@@ -164,6 +171,29 @@ export const updateProduct = async (req, res, next) => {
         const { productId } = req.params;
         const { name, description, price, stock_quantity, category_id, images, is_active } = req.body;
 
+        if (category_id && !isValidUuid(category_id)) {
+            return res.status(400).json({ message: 'Category ID không hợp lệ!' });
+        }
+
+        if (!name || price === undefined || typeof name !== 'string' || name.trim().length === 0) {
+            return res.status(400).json({ message: 'Tên và giá sản phẩm là bắt buộc!' });
+        }
+
+        if (name.trim().length > 255) {
+            return res.status(400).json({ message: 'Tên sản phẩm tối đa 255 ký tự!' });
+        }
+        const numericPrice = Number(price);
+        if (!Number.isFinite(numericPrice) || numericPrice < 0) {
+            return res.status(400).json({ message: 'Giá sản phẩm phải là số dương!' });
+        }
+        const qty = Number(stock_quantity) || 0;
+        if (!Number.isInteger(qty) || qty < 0) {
+            return res.status(400).json({ message: 'Số lượng tồn kho phải là số nguyên không âm!' });
+        }
+        if (images && (!Array.isArray(images) || images.some(url => typeof url !== 'string'))) {
+            return res.status(400).json({ message: 'Images phải là mảng URL hợp lệ!' });
+        }
+
         const existingProduct = await prisma.product.findUnique({
             where: { id: productId },
         });
@@ -177,8 +207,8 @@ export const updateProduct = async (req, res, next) => {
             data: {
                 name,
                 description,
-                price,
-                stock_quantity: stock_quantity !== undefined ? Number(stock_quantity) : existingProduct.stock_quantity,
+                price: numericPrice,
+                stock_quantity: qty !== undefined ? qty : existingProduct.stock_quantity,
                 category_id: category_id || existingProduct.category_id,
                 images: images !== undefined ? images : existingProduct.images,
                 is_active: is_active !== undefined ? is_active : existingProduct.is_active,

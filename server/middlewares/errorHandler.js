@@ -14,12 +14,18 @@ export const errorHandler = (err, req, res, next) => {
     } else if (err.code === 'P2025') {
         statusCode = 404;
         message = 'Không tìm thấy dữ liệu yêu cầu hoặc bản ghi đã bị xóa.';
+    } else if (err.code === 'P2023' || (typeof err.message === 'string' && err.message.includes('invalid input syntax for type uuid'))) {
+        statusCode = 400;
+        message = 'Định dạng ID không hợp lệ.';
     }
+
+    const friendlyMessage = statusCode === 500 ? 'Hệ thống đang gặp sự cố, vui lòng thử lại sau.' : message;
 
     const response = {
         success: false,
-        message: statusCode === 500 ? 'Hệ thống đang gặp sự cố, vui lòng thử lại sau.' : message,
-        ...(process.env.NODE_ENV === 'development' && { error: err.message, stack: err.stack }),
+        message: friendlyMessage,
+        error: friendlyMessage,
+        ...(process.env.NODE_ENV === 'development' && { devError: err.message, stack: err.stack }),
     };
 
     return res.status(statusCode).json(response);

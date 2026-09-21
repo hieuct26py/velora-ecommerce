@@ -77,7 +77,16 @@ export const createOrder = async (req, res, next) => {
             }
 
             await tx.orderItem.createMany({ data: orderItemsData });
-            await tx.cartItem.deleteMany({ where: { cart_id: cart.id } });
+            const deletedCartItems = await tx.cartItem.deleteMany({ 
+                where: { cart_id: cart.id, product_id: { in: sortedItems.map(item => item.product_id) } }
+            });
+
+            if (deletedCartItems.count !== sortedItems.length) {
+                throw {
+                    type: 'ATOMIC_INVENTORY_ERROR',
+                    message: 'Giỏ hàng đã thay đổi hoặc đơn hàng đang được xử lý. Vui lòng tải lại trang.'
+                };
+            }
 
             return newOrder;
         });
@@ -190,8 +199,8 @@ export const getMyOrders = async (req, res, next) => {
 export const getAllOrders = async (req, res, next) => {
     try {
         const { status, search, minAmount, maxAmount, sortBy, page = 1, limit = 10 } = req.query;
-        const pageNumber = Number(page);
-        const limitNumber = Number(limit);
+        const pageNumber = Math.max(1, Number.parseInt(page, 10) || 1);
+        const limitNumber = Math.max(1, Number.parseInt(limit, 10) || 10);
         const skip = (pageNumber - 1) * limitNumber;
 
         const validStatuses = ['PENDING', 'PAID', 'CANCELLED'];
@@ -382,10 +391,17 @@ export const deleteOrder = async (req, res, next) => {
         }
 
         await prisma.$transaction(async (tx) => {
-            await tx.order.update({
-                where: { id: orderId },
+            const updateResult = await tx.order.updateMany({
+                where: { id: orderId, status: 'PENDING' },
                 data: { status: 'CANCELLED' }
             });
+
+            if (updateResult.count === 0) {
+                throw {
+                    type: 'STATE_CONFLICT',
+                    message: 'Xung đột dữ liệu: Đơn hàng đã được xử lý bởi một yêu cầu khác. Vui lòng tải lại trang.'
+                };
+            }
 
             const sortedItems = [...order.items].sort((a, b) => a.product_id.localeCompare(b.product_id));
 
@@ -402,6 +418,9 @@ export const deleteOrder = async (req, res, next) => {
         return res.status(200).json({ message: 'Xóa đơn hàng thành công' });
     }
     catch (error) {
+        if (error.type === 'STATE_CONFLICT') {
+            return res.status(409).json({ message: error.message });
+        }
         next(error);
     }
 }
