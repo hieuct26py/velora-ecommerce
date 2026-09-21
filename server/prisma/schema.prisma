@@ -64,6 +64,8 @@ model Product {
   order_items    OrderItem[]
 
   @@index([category_id], map: "idx_products_category_id") // Bổ sung Index cho khóa ngoại để tối ưu tốc độ tìm kiếm
+  @@index([is_active, created_at(sort: Desc)], map: "idx_products_active_created_desc")
+  @@index([is_active, price], map: "idx_products_active_price")
   @@map("products")
 }
 

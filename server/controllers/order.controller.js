@@ -50,8 +50,22 @@ export const createOrder = async (req, res, next) => {
                 price_at_purchase: item.product.price
             }));
 
-            const updatePromises = sortedItems.map(item =>
-                tx.product.updateMany({
+            // const updatePromises = sortedItems.map(item =>
+            //     tx.product.updateMany({
+            //         where: {
+            //             id: item.product_id,
+            //             is_active: true,
+            //             stock_quantity: { gte: item.quantity },
+            //             price: item.product.price
+            //         },
+            //         data: {
+            //             stock_quantity: { decrement: item.quantity }
+            //         }
+            //     })
+            // );
+
+            for (const item of sortedItems) {
+                const updateResult = await tx.product.updateMany({
                     where: {
                         id: item.product_id,
                         is_active: true,
@@ -61,22 +75,30 @@ export const createOrder = async (req, res, next) => {
                     data: {
                         stock_quantity: { decrement: item.quantity }
                     }
-                })
-            );
+                });
 
-            const updateResults = await Promise.all(updatePromises);
-
-            const failedIndex = updateResults.findIndex(result => result.count === 0);
-
-            if (failedIndex !== -1) {
-                const failedItem = sortedItems[failedIndex].product.name;
-                throw {
-                    type: 'ATOMIC_INVENTORY_ERROR',
-                    message: `Sản phẩm ${failedItem} không đủ số lượng hoặc đã bị thay đổi giá. Vui lòng kiểm tra lại giỏ hàng.`
-                };
+                if (updateResult.count === 0) {
+                    throw {
+                        type: 'ATOMIC_INVENTORY_ERROR',
+                        message: `Sản phẩm ${item.product.name} không đủ số lượng hoặc đã bị thay đổi giá. Vui lòng kiểm tra lại giỏ hàng.`
+                    };
+                }
             }
 
+            // const updateResults = await Promise.all(updatePromises);
+
+            // const failedIndex = updateResults.findIndex(result => result.count === 0);
+
+            // if (failedIndex !== -1) {
+            //     const failedItem = sortedItems[failedIndex].product.name;
+            //     throw {
+            //         type: 'ATOMIC_INVENTORY_ERROR',
+            //         message: `Sản phẩm ${failedItem} không đủ số lượng hoặc đã bị thay đổi giá. Vui lòng kiểm tra lại giỏ hàng.`
+            //     };
+            // }
+
             await tx.orderItem.createMany({ data: orderItemsData });
+
             const deletedCartItems = await tx.cartItem.deleteMany({ 
                 where: { cart_id: cart.id, product_id: { in: sortedItems.map(item => item.product_id) } }
             });
@@ -104,9 +126,11 @@ export const createOrder = async (req, res, next) => {
 
 export const getMyOrders = async (req, res, next) => {
     try {
+        const MAX_LIMIT = 100;
+
         const userId = req.user.sub;
         const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
-        const limit = Math.max(1, Number.parseInt(req.query.limit, 10) || 10);
+        const limit = Math.min(Math.max(1, Number.parseInt(req.query.limit, 10) || 10), MAX_LIMIT);
         const skip = (page - 1) * limit;
 
         const { status, search, minAmount, maxAmount, sortBy } = req.query;
@@ -198,9 +222,11 @@ export const getMyOrders = async (req, res, next) => {
 
 export const getAllOrders = async (req, res, next) => {
     try {
+        const MAX_LIMIT = 100;
+
         const { status, search, minAmount, maxAmount, sortBy, page = 1, limit = 10 } = req.query;
         const pageNumber = Math.max(1, Number.parseInt(page, 10) || 1);
-        const limitNumber = Math.max(1, Number.parseInt(limit, 10) || 10);
+        const limitNumber = Math.min(Math.max(1, Number.parseInt(limit, 10) || 10), MAX_LIMIT);
         const skip = (pageNumber - 1) * limitNumber;
 
         const validStatuses = ['PENDING', 'PAID', 'CANCELLED'];
@@ -344,7 +370,8 @@ export const updateOrderStatus = async (req, res, next) => {
                     };
                 }
 
-                for (const item of existingOrder.items) {
+                const sortedItems = [...existingOrder.items].sort((a, b) => a.product_id.localeCompare(b.product_id));
+                for (const item of sortedItems) {
                     await tx.product.update({
                         where: { id: item.product_id },
                         data: { stock_quantity: { increment: item.quantity } },
@@ -405,14 +432,21 @@ export const deleteOrder = async (req, res, next) => {
 
             const sortedItems = [...order.items].sort((a, b) => a.product_id.localeCompare(b.product_id));
 
-            const updatePromises = sortedItems.map(item =>
-                tx.product.update({
+            // const updatePromises = sortedItems.map(item =>
+            //     tx.product.update({
+            //         where: { id: item.product_id },
+            //         data: { stock_quantity: { increment: item.quantity } }
+            //     })
+            // );
+            
+            // await Promise.all(updatePromises);
+
+            for (const item of sortedItems) {
+                await tx.product.update({
                     where: { id: item.product_id },
                     data: { stock_quantity: { increment: item.quantity } }
-                })
-            );
-            
-            await Promise.all(updatePromises);
+                });
+            }
         });
 
         return res.status(200).json({ message: 'Xóa đơn hàng thành công' });

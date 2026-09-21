@@ -81,8 +81,10 @@ export const updateMe = async (req, res, next) => {
 
 export const getAllUsers = async (req, res, next) => {
     try {
+        const MAX_LIMIT = 100;
+
         const page = Math.max(1, Number.parseInt(req.query.page) || 1);
-        const limit = Math.max(1, Number.parseInt(req.query.limit) || 10);
+        const limit = Math.min(Math.max(1, Number.parseInt(req.query.limit) || 10), MAX_LIMIT);
         const skip = (page - 1) * limit;
         const { search, role, status, sortBy } = req.query;
 
@@ -192,7 +194,7 @@ export const updateUser = async (req, res, next) => {
             if (!EMAIL_REGEX.test(normalizedEmail)) {
                 return res.status(400).json({ message: 'Email không hợp lệ!' });
             }
-            const existingUser = await prisma.user.findUnique({ where: { email } });
+            const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
             if (existingUser && existingUser.id !== userId) {
                 return res.status(400).json({ message: 'Email đã được sử dụng bởi người dùng khác!' });
             }

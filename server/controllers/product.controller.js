@@ -5,8 +5,10 @@ import { isValidUuid } from '../middlewares/validateUuid.js';
 
 export const getAllProducts = async (req, res, next) => {
     try {
+        const MAX_LIMIT = 100;
+        
         const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
-        const limit = Math.max(1, Number.parseInt(req.query.limit, 10) || 12);
+        const limit = Math.min(Math.max(1, Number.parseInt(req.query.limit, 10) || 10), MAX_LIMIT);
         const skip = (page - 1) * limit;
         
         const { keyword, minPrice, maxPrice, category, status = 'ACTIVE', stockStatus, sortBy } = req.query;
