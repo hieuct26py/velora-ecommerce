@@ -101,7 +101,7 @@ export function CartProvider({ children }) {
       setServerCart(cartData.data);
       setError('');
     } catch (requestError) {
-      setError(requestError.response?.data?.error || 'We could not load your cart.');
+      setError(requestError.response?.data?.message || requestError.response?.data?.error || 'We could not load your cart.');
     } finally {
       setIsLoading(false);
     }
@@ -132,7 +132,7 @@ export function CartProvider({ children }) {
         await refreshStocks();
         setError('');
       } catch (requestError) {
-        setError(requestError.response?.data?.error || 'We could not sync your cart. Your guest cart is preserved.');
+        setError(requestError.response?.data?.message || requestError.response?.data?.error || 'We could not sync your cart. Your guest cart is preserved.');
         await loadServerCart();
       } finally {
         setIsLoading(false);
@@ -189,7 +189,7 @@ export function CartProvider({ children }) {
       setServerCart(data.data);
       await refreshStocks();
     } catch (requestError) {
-      setError(requestError.response?.data?.error || 'We could not add that item.');
+      setError(requestError.response?.data?.message || requestError.response?.data?.error || 'We could not add that item.');
       await loadServerCart();
       throw requestError;
     }
@@ -206,7 +206,7 @@ export function CartProvider({ children }) {
       setServerCart(data.data);
       await refreshStocks();
     } catch (requestError) {
-      setError(requestError.response?.data?.error || 'Could not remove item.');
+      setError(requestError.response?.data?.message || requestError.response?.data?.error || 'Could not remove item.');
       await loadServerCart();
     }
   };
@@ -230,7 +230,7 @@ export function CartProvider({ children }) {
       setServerCart(data.data);
       await refreshStocks();
     } catch (requestError) {
-      const errMsg = requestError.response?.data?.error || 'We could not update that quantity.';
+      const errMsg = requestError.response?.data?.message || requestError.response?.data?.error || 'We could not update that quantity.';
       setError(errMsg);
       await loadServerCart();
       throw requestError;

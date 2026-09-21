@@ -2171,6 +2171,46 @@ body { background: var(--paper); }
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
 }
 
+/* ==========================================================================
+   Product Card Bottom-Anchored Footer (Stock & Add To Cart Alignment)
+   ========================================================================== */
+.product-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
 
+.product-card-link {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
 
+.product-image-frame {
+  flex-shrink: 0;
+}
 
+.product-card-copy {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1 1 auto;
+}
+
+.product-card-copy > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.product-card-copy .price {
+  flex-shrink: 0;
+}
+
+.product-card-footer {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
